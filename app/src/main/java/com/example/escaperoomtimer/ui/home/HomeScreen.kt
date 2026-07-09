@@ -10,20 +10,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -32,26 +31,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.escaperoomtimer.model.RoomInfo
-import com.example.escaperoomtimer.model.RoomStatus
 import com.example.escaperoomtimer.util.nowText
 import kotlinx.coroutines.delay
 
 @Composable
 fun HomeScreen(
+    rooms: List<RoomInfo>,
     onRoomClick: (RoomInfo) -> Unit
 ) {
     val context = LocalContext.current
-
-    val rooms = remember {
-        mutableStateListOf(
-            RoomInfo("ROOM 1", 32 * 60 + 45, RoomStatus.RUNNING),
-            RoomInfo("ROOM 2", 4 * 60 + 58, RoomStatus.WARNING),
-            RoomInfo("ROOM 3", 21 * 60 + 30, RoomStatus.RUNNING),
-            RoomInfo("ROOM 4", 0, RoomStatus.WAITING),
-            RoomInfo("ROOM 5", 0, RoomStatus.FINISHED)
-        )
-    }
-
     var currentTime by remember { mutableStateOf(nowText()) }
 
     LaunchedEffect(Unit) {
@@ -69,95 +57,59 @@ fun HomeScreen(
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "☰",
-                color = Color.White,
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold
-            )
-
-            Text(
-                text = "방탈출 운영",
-                color = Color.White,
-                fontSize = 25.sp,
-                fontWeight = FontWeight.ExtraBold
-            )
-
-            Text(
-                text = "⚙",
-                color = Color.White,
-                fontSize = 25.sp,
-                fontWeight = FontWeight.Bold
-            )
+            Text("☰", color = Color.White, fontSize = 28.sp)
+            Text("방탈출 운영", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text("⚙", color = Color.White, fontSize = 24.sp)
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(Modifier.height(14.dp))
+        HorizontalDivider(color = Color(0xFF2A2F35))
+        Spacer(Modifier.height(14.dp))
 
-        HorizontalDivider(
-            color = Color(0xFF2A2F35),
-            thickness = 1.dp
+        Text(
+            text = "현재 시간",
+            color = Color(0xFF8D96A0),
+            fontSize = 12.sp,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+        )
+        Text(
+            text = currentTime,
+            color = Color.White,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(Modifier.height(18.dp))
 
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(
-                text = "현재 시간",
-                color = Color(0xFF9EA4AA),
-                fontSize = 13.sp
-            )
-
-            Text(
-                text = currentTime,
-                color = Color.White,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        Spacer(modifier = Modifier.height(22.dp))
-
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-        ) {
-            rooms.forEach { room ->
+            items(rooms, key = { it.id }) { room ->
                 RoomCard(
                     room = room,
                     onClick = { onRoomClick(room) }
                 )
-
-                Spacer(modifier = Modifier.height(12.dp))
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(Modifier.height(12.dp))
 
         Button(
             onClick = {
-                Toast.makeText(context, "새 방 추가는 다음 커밋에서 연결할게요.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "새 방 추가는 다음 버전에서 넣을게요.", Toast.LENGTH_SHORT).show()
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .height(60.dp),
-            shape = RoundedCornerShape(18.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFFFF7A00)
-            )
+                .height(58.dp),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF7A00))
         ) {
-            Text(
-                text = "+ 새 방 추가",
-                color = Color.White,
-                fontSize = 19.sp,
-                fontWeight = FontWeight.ExtraBold
-            )
+            Text("+ 새 방 추가", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
     }
 }

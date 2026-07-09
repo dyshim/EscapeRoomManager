@@ -2,10 +2,19 @@ package com.example.escaperoomtimer.ui.timer
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -13,24 +22,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.escaperoomtimer.model.RoomInfo
+import com.example.escaperoomtimer.manager.TimerManager
+import com.example.escaperoomtimer.model.RoomStatus
 import com.example.escaperoomtimer.util.formatTime
 import com.example.escaperoomtimer.util.openHintApp
-import kotlinx.coroutines.delay
 
 @Composable
-fun TimerScreen(room: RoomInfo, onBack: () -> Unit) {
+fun TimerScreen(
+    roomId: String,
+    onBack: () -> Unit
+) {
     val context = LocalContext.current
-    var seconds by remember { mutableIntStateOf(if (room.seconds > 0) room.seconds else 60 * 60) }
-    var running by remember { mutableStateOf(false) }
-
-    LaunchedEffect(running) {
-        while (running && seconds > 0) {
-            delay(1000)
-            seconds--
-        }
-        if (seconds <= 0) running = false
-    }
+    val room = TimerManager.getRoom(roomId) ?: return
 
     Column(
         modifier = Modifier
@@ -44,41 +47,91 @@ fun TimerScreen(room: RoomInfo, onBack: () -> Unit) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("←", color = Color.White, fontSize = 28.sp, modifier = Modifier.clickable { onBack() })
+            Text(
+                text = "←",
+                color = Color.White,
+                fontSize = 28.sp,
+                modifier = Modifier.clickable { onBack() }
+            )
             Text(room.name, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
             Text("⋮", color = Color.White, fontSize = 26.sp)
         }
 
-        Spacer(Modifier.height(70.dp))
+        Spacer(Modifier.height(62.dp))
 
         Text(
-            formatTime(seconds),
-            color = Color(0xFFFFB000),
+            text = formatTime(room.seconds),
+            color = when (room.status) {
+                RoomStatus.WARNING -> Color(0xFFFF4B4B)
+                RoomStatus.FINISHED -> Color(0xFFFF4B4B)
+                else -> Color(0xFFFFB000)
+            },
             fontSize = 72.sp,
             fontWeight = FontWeight.Bold
         )
 
-        Text("남은 시간", color = Color.White, fontSize = 17.sp)
-        Spacer(Modifier.height(45.dp))
+        Text(
+            text = if (room.isRunning) "진행중" else "남은 시간",
+            color = Color.White,
+            fontSize = 17.sp
+        )
 
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            ActionButton(if (running) "Ⅱ 일시정지" else "▶ 시작", Color(0xFF0D6B24), Modifier.weight(1f)) { running = !running }
-            ActionButton("■ 종료", Color(0xFF9B211B), Modifier.weight(1f)) { running = false; seconds = 0 }
+        Spacer(Modifier.height(42.dp))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            TimerButton(
+                text = if (room.isRunning) "Ⅱ 일시정지" else "▶ 시작",
+                color = if (room.isRunning) Color(0xFFC96D00) else Color(0xFF0D6B24),
+                modifier = Modifier.weight(1f),
+                onClick = { TimerManager.startOrPause(room.id) }
+            )
+            TimerButton(
+                text = "■ 종료",
+                color = Color(0xFF9B211B),
+                modifier = Modifier.weight(1f),
+                onClick = { TimerManager.stop(room.id) }
+            )
         }
+
         Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            ActionButton("+5분", Color(0xFFC96D00), Modifier.weight(1f)) { seconds += 5 * 60 }
-            ActionButton("-5분", Color(0xFF242A2F), Modifier.weight(1f)) { seconds = (seconds - 5 * 60).coerceAtLeast(0) }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            TimerButton(
+                text = "+5분",
+                color = Color(0xFFC96D00),
+                modifier = Modifier.weight(1f),
+                onClick = { TimerManager.addFiveMinutes(room.id) }
+            )
+            TimerButton(
+                text = "-5분",
+                color = Color(0xFF242A2F),
+                modifier = Modifier.weight(1f),
+                onClick = { TimerManager.minusFiveMinutes(room.id) }
+            )
         }
+
         Spacer(Modifier.height(12.dp))
-        ActionButton("📱 힌트앱 실행", Color(0xFF5E2B86), Modifier.fillMaxWidth()) { openHintApp(context) }
+
+        TimerButton(
+            text = "↺ 60분 초기화",
+            color = Color(0xFF242A2F),
+            modifier = Modifier.fillMaxWidth(),
+            onClick = { TimerManager.reset(room.id) }
+        )
+
         Spacer(Modifier.height(12.dp))
-        ActionButton("📝 메모", Color(0xFF171C20), Modifier.fillMaxWidth()) { }
+
+        TimerButton(
+            text = "📱 힌트앱 실행",
+            color = Color(0xFF5E2B86),
+            modifier = Modifier.fillMaxWidth(),
+            onClick = { openHintApp(context) }
+        )
     }
 }
 
 @Composable
-private fun ActionButton(
+fun TimerButton(
     text: String,
     color: Color,
     modifier: Modifier = Modifier,
@@ -87,7 +140,7 @@ private fun ActionButton(
     Button(
         onClick = onClick,
         modifier = modifier.height(62.dp),
-        shape = RoundedCornerShape(11.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = ButtonDefaults.buttonColors(containerColor = color)
     ) {
         Text(text, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)

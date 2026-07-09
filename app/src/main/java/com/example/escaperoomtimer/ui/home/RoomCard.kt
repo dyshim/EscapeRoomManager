@@ -21,7 +21,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -35,99 +34,96 @@ fun RoomCard(
     room: RoomInfo,
     onClick: () -> Unit
 ) {
-    val displayTime = when (room.status) {
+    val timeText = when (room.status) {
         RoomStatus.WAITING -> "대기중"
         RoomStatus.FINISHED -> "종료"
         else -> formatTime(room.seconds)
     }
 
-    val accentColor = when (room.status) {
-        RoomStatus.WAITING -> Color(0xFF8B8B8B)
-        RoomStatus.RUNNING -> Color(0xFF22C55E)
-        RoomStatus.WARNING -> Color(0xFFFF3B30)
-        RoomStatus.FINISHED -> Color(0xFF5F6368)
+    val timeColor = when (room.status) {
+        RoomStatus.WAITING -> Color(0xFF9E9E9E)
+        RoomStatus.FINISHED -> Color(0xFF777777)
+        RoomStatus.WARNING -> Color(0xFFFF4B4B)
+        RoomStatus.RUNNING -> Color(0xFF42E66F)
     }
 
     val badgeText = when (room.status) {
         RoomStatus.WAITING -> "대기"
-        RoomStatus.RUNNING -> "진행중"
+        RoomStatus.RUNNING -> if (room.isRunning) "진행중" else "준비"
         RoomStatus.WARNING -> "5분 이하"
         RoomStatus.FINISHED -> "종료"
     }
 
-    val badgeBackground = when (room.status) {
-        RoomStatus.WAITING -> Color(0xFF30363D)
-        RoomStatus.RUNNING -> Color(0xFF123D24)
-        RoomStatus.WARNING -> Color(0xFF4A1717)
-        RoomStatus.FINISHED -> Color(0xFF262A2E)
+    val badgeColor = when (room.status) {
+        RoomStatus.WAITING -> Color(0xFF555555)
+        RoomStatus.RUNNING -> Color(0xFF0F4A1E)
+        RoomStatus.WARNING -> Color(0xFF5A1C1C)
+        RoomStatus.FINISHED -> Color(0xFF444444)
     }
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(104.dp)
-            .shadow(8.dp, RoundedCornerShape(18.dp))
+            .height(78.dp)
             .clickable { onClick() },
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = Color(0xFF171C20)
-        )
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 18.dp, vertical = 14.dp),
+                .padding(horizontal = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .background(accentColor, CircleShape)
-                    )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(timeColor, CircleShape)
+                )
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                Spacer(Modifier.width(8.dp))
 
+                Column {
                     Text(
                         text = room.name,
                         color = Color.White,
-                        fontSize = 17.sp,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = timeText,
+                        color = timeColor,
+                        fontSize = 28.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = displayTime,
-                    color = accentColor,
-                    fontSize = 34.sp,
-                    fontWeight = FontWeight.ExtraBold
-                )
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .background(badgeBackground, RoundedCornerShape(20.dp))
-                        .padding(horizontal = 12.dp, vertical = 7.dp)
+                        .background(badgeColor, RoundedCornerShape(8.dp))
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
                 ) {
                     Text(
                         text = badgeText,
                         color = Color.White,
-                        fontSize = 13.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
 
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(Modifier.width(10.dp))
 
                 Text(
                     text = "›",
-                    color = Color(0xFFB8B8B8),
-                    fontSize = 34.sp,
+                    color = Color.White,
+                    fontSize = 28.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
