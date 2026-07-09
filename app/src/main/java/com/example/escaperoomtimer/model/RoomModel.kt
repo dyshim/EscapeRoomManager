@@ -5,7 +5,10 @@ data class RoomInfo(
     val name: String,
     val seconds: Int,
     val status: RoomStatus,
-    val isRunning: Boolean = false
+    val isRunning: Boolean = false,
+    val defaultMinutes: Int = 60,
+    val hintEnabled: Boolean = true,
+    val guestScreenEnabled: Boolean = true
 )
 
 enum class RoomStatus {

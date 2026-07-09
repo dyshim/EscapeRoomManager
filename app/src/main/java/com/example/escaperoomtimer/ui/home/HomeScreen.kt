@@ -2,6 +2,7 @@ package com.example.escaperoomtimer.ui.home
 
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -37,7 +38,8 @@ import kotlinx.coroutines.delay
 @Composable
 fun HomeScreen(
     rooms: List<RoomInfo>,
-    onRoomClick: (RoomInfo) -> Unit
+    onRoomClick: (RoomInfo) -> Unit,
+    onSettingsClick: () -> Unit
 ) {
     val context = LocalContext.current
     var currentTime by remember { mutableStateOf(nowText()) }
@@ -62,7 +64,12 @@ fun HomeScreen(
         ) {
             Text("☰", color = Color.White, fontSize = 28.sp)
             Text("방탈출 운영", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-            Text("⚙", color = Color.White, fontSize = 24.sp)
+            Text(
+                text = "⚙",
+                color = Color.White,
+                fontSize = 24.sp,
+                modifier = Modifier.clickable { onSettingsClick() }
+            )
         }
 
         Spacer(Modifier.height(14.dp))

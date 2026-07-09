@@ -121,7 +121,7 @@ fun TimerScreen(
         Spacer(Modifier.height(12.dp))
 
         TimerButton(
-            text = "↺ 60분 초기화",
+            text = "↺ 기본시간 초기화",
             color = Color(0xFF242A2F),
             modifier = Modifier.fillMaxWidth(),
             onClick = { TimerManager.reset(room.id) }

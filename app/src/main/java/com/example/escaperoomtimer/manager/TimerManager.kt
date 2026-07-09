@@ -3,14 +3,15 @@ package com.example.escaperoomtimer.manager
 import androidx.compose.runtime.mutableStateListOf
 import com.example.escaperoomtimer.model.RoomInfo
 import com.example.escaperoomtimer.model.RoomStatus
+import com.example.escaperoomtimer.repository.RoomRepository
 
 object TimerManager {
     val rooms = mutableStateListOf(
-        RoomInfo("room1", "ROOM 1", 32 * 60 + 45, RoomStatus.PAUSED, isRunning = false),
-        RoomInfo("room2", "ROOM 2", 4 * 60 + 58, RoomStatus.WARNING, isRunning = false),
-        RoomInfo("room3", "ROOM 3", 21 * 60 + 30, RoomStatus.PAUSED, isRunning = false),
-        RoomInfo("room4", "ROOM 4", 60 * 60, RoomStatus.WAITING, isRunning = false),
-        RoomInfo("room5", "ROOM 5", 0, RoomStatus.FINISHED, isRunning = false)
+        RoomInfo("room1", "ROOM 1", 32 * 60 + 45, RoomStatus.PAUSED, isRunning = false, defaultMinutes = 60),
+        RoomInfo("room2", "ROOM 2", 4 * 60 + 58, RoomStatus.WARNING, isRunning = false, defaultMinutes = 60),
+        RoomInfo("room3", "ROOM 3", 21 * 60 + 30, RoomStatus.PAUSED, isRunning = false, defaultMinutes = 60),
+        RoomInfo("room4", "ROOM 4", 60 * 60, RoomStatus.WAITING, isRunning = false, defaultMinutes = 60),
+        RoomInfo("room5", "ROOM 5", 0, RoomStatus.FINISHED, isRunning = false, defaultMinutes = 60)
     )
 
     fun getRoom(roomId: String): RoomInfo? {
@@ -21,7 +22,7 @@ object TimerManager {
         updateRoom(roomId) { room ->
             if (room.status == RoomStatus.FINISHED && room.seconds <= 0) return@updateRoom room
 
-            val fixedSeconds = if (room.seconds <= 0) 60 * 60 else room.seconds
+            val fixedSeconds = if (room.seconds <= 0) room.defaultMinutes * 60 else room.seconds
             val nextRunning = !room.isRunning
 
             room.copy(
@@ -60,9 +61,28 @@ object TimerManager {
         }
     }
 
-    fun reset(roomId: String, minutes: Int = 60) {
+    fun reset(roomId: String) {
         updateRoom(roomId) { room ->
-            room.copy(seconds = minutes * 60, isRunning = false, status = RoomStatus.WAITING)
+            room.copy(
+                seconds = room.defaultMinutes * 60,
+                isRunning = false,
+                status = RoomStatus.WAITING
+            )
+        }
+    }
+
+    fun updateRoomSetting(roomId: String, name: String, defaultMinutes: Int) {
+        updateRoom(roomId) { room ->
+            val cleanName = RoomRepository.sanitizeRoomName(name)
+            val cleanMinutes = RoomRepository.sanitizeDefaultMinutes(defaultMinutes)
+            val shouldResetTime = !room.isRunning && room.status != RoomStatus.PAUSED
+
+            room.copy(
+                name = cleanName,
+                defaultMinutes = cleanMinutes,
+                seconds = if (shouldResetTime) cleanMinutes * 60 else room.seconds,
+                status = if (shouldResetTime) RoomStatus.WAITING else room.status
+            )
         }
     }
 
