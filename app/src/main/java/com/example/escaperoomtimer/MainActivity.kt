@@ -10,6 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.example.escaperoomtimer.manager.TimerManager
+import com.example.escaperoomtimer.ui.guest.GuestScreen
 import com.example.escaperoomtimer.ui.home.HomeScreen
 import com.example.escaperoomtimer.ui.setting.SettingScreen
 import com.example.escaperoomtimer.ui.timer.TimerScreen
@@ -24,10 +25,17 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+private enum class ScreenMode {
+    HOME,
+    SETTING,
+    STAFF_TIMER,
+    GUEST_TIMER
+}
+
 @Composable
 fun EscapeRoomManagerApp() {
     var selectedRoomId by remember { mutableStateOf<String?>(null) }
-    var isSettingOpen by remember { mutableStateOf(false) }
+    var screenMode by remember { mutableStateOf(ScreenMode.HOME) }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -36,30 +44,53 @@ fun EscapeRoomManagerApp() {
         }
     }
 
-    when {
-        isSettingOpen -> {
+    when (screenMode) {
+        ScreenMode.HOME -> {
+            HomeScreen(
+                rooms = TimerManager.rooms,
+                onRoomClick = { room ->
+                    selectedRoomId = room.id
+                    screenMode = ScreenMode.STAFF_TIMER
+                },
+                onSettingsClick = {
+                    screenMode = ScreenMode.SETTING
+                }
+            )
+        }
+
+        ScreenMode.SETTING -> {
             SettingScreen(
                 rooms = TimerManager.rooms,
-                onBack = { isSettingOpen = false },
+                onBack = { screenMode = ScreenMode.HOME },
                 onSaveRoom = { roomId, name, defaultMinutes ->
                     TimerManager.updateRoomSetting(roomId, name, defaultMinutes)
                 }
             )
         }
 
-        selectedRoomId == null -> {
-            HomeScreen(
-                rooms = TimerManager.rooms,
-                onRoomClick = { room -> selectedRoomId = room.id },
-                onSettingsClick = { isSettingOpen = true }
-            )
+        ScreenMode.STAFF_TIMER -> {
+            val roomId = selectedRoomId
+            if (roomId == null) {
+                screenMode = ScreenMode.HOME
+            } else {
+                TimerScreen(
+                    roomId = roomId,
+                    onBack = { screenMode = ScreenMode.HOME },
+                    onGuestClick = { screenMode = ScreenMode.GUEST_TIMER }
+                )
+            }
         }
 
-        else -> {
-            TimerScreen(
-                roomId = selectedRoomId!!,
-                onBack = { selectedRoomId = null }
-            )
+        ScreenMode.GUEST_TIMER -> {
+            val roomId = selectedRoomId
+            if (roomId == null) {
+                screenMode = ScreenMode.HOME
+            } else {
+                GuestScreen(
+                    roomId = roomId,
+                    onBack = { screenMode = ScreenMode.STAFF_TIMER }
+                )
+            }
         }
     }
 }

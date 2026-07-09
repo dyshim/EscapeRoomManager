@@ -31,7 +31,8 @@ import com.example.escaperoomtimer.util.openHintApp
 @Composable
 fun TimerScreen(
     roomId: String,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onGuestClick: () -> Unit
 ) {
     val context = LocalContext.current
     val room = TimerManager.getRoom(roomId) ?: return
@@ -58,7 +59,7 @@ fun TimerScreen(
             Text("직원", color = Color(0xFFFFB000), fontSize = 15.sp, fontWeight = FontWeight.Bold)
         }
 
-        Spacer(Modifier.height(42.dp))
+        Spacer(Modifier.height(34.dp))
 
         StatusBadge(room.status, room.isRunning)
 
@@ -84,7 +85,7 @@ fun TimerScreen(
             fontWeight = FontWeight.Bold
         )
 
-        Spacer(Modifier.height(38.dp))
+        Spacer(Modifier.height(30.dp))
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             TimerButton(
@@ -125,6 +126,15 @@ fun TimerScreen(
             color = Color(0xFF242A2F),
             modifier = Modifier.fillMaxWidth(),
             onClick = { TimerManager.reset(room.id) }
+        )
+
+        Spacer(Modifier.height(12.dp))
+
+        TimerButton(
+            text = "👥 손님 화면",
+            color = Color(0xFF0D3E6B),
+            modifier = Modifier.fillMaxWidth(),
+            onClick = onGuestClick
         )
 
         Spacer(Modifier.height(12.dp))
@@ -174,11 +184,11 @@ fun TimerButton(
 ) {
     Button(
         onClick = onClick,
-        modifier = modifier.height(62.dp),
+        modifier = modifier.height(58.dp),
         shape = RoundedCornerShape(12.dp),
         colors = ButtonDefaults.buttonColors(containerColor = color)
     ) {
-        Text(text, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text(text, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
     }
 }
 
