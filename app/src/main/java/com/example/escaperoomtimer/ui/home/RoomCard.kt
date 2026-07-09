@@ -44,13 +44,15 @@ fun RoomCard(
         RoomStatus.WAITING -> Color(0xFF9E9E9E)
         RoomStatus.FINISHED -> Color(0xFF777777)
         RoomStatus.WARNING -> Color(0xFFFF4B4B)
+        RoomStatus.PAUSED -> Color(0xFFFFB000)
         RoomStatus.RUNNING -> Color(0xFF42E66F)
     }
 
     val badgeText = when (room.status) {
         RoomStatus.WAITING -> "대기"
-        RoomStatus.RUNNING -> if (room.isRunning) "진행중" else "준비"
-        RoomStatus.WARNING -> "5분 이하"
+        RoomStatus.RUNNING -> "진행중"
+        RoomStatus.WARNING -> if (room.isRunning) "5분 이하" else "일시정지"
+        RoomStatus.PAUSED -> "일시정지"
         RoomStatus.FINISHED -> "종료"
     }
 
@@ -58,6 +60,7 @@ fun RoomCard(
         RoomStatus.WAITING -> Color(0xFF555555)
         RoomStatus.RUNNING -> Color(0xFF0F4A1E)
         RoomStatus.WARNING -> Color(0xFF5A1C1C)
+        RoomStatus.PAUSED -> Color(0xFF6A5300)
         RoomStatus.FINISHED -> Color(0xFF444444)
     }
 

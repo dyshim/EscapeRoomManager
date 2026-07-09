@@ -3,6 +3,7 @@ package com.example.escaperoomtimer.ui.timer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -54,29 +55,36 @@ fun TimerScreen(
                 modifier = Modifier.clickable { onBack() }
             )
             Text(room.name, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-            Text("⋮", color = Color.White, fontSize = 26.sp)
+            Text("직원", color = Color(0xFFFFB000), fontSize = 15.sp, fontWeight = FontWeight.Bold)
         }
 
-        Spacer(Modifier.height(62.dp))
+        Spacer(Modifier.height(42.dp))
+
+        StatusBadge(room.status, room.isRunning)
+
+        Spacer(Modifier.height(18.dp))
 
         Text(
             text = formatTime(room.seconds),
-            color = when (room.status) {
-                RoomStatus.WARNING -> Color(0xFFFF4B4B)
-                RoomStatus.FINISHED -> Color(0xFFFF4B4B)
-                else -> Color(0xFFFFB000)
-            },
-            fontSize = 72.sp,
+            color = timerColor(room.status),
+            fontSize = 76.sp,
             fontWeight = FontWeight.Bold
         )
 
         Text(
-            text = if (room.isRunning) "진행중" else "남은 시간",
+            text = when (room.status) {
+                RoomStatus.WAITING -> "대기중"
+                RoomStatus.RUNNING -> "진행중"
+                RoomStatus.WARNING -> "종료 임박"
+                RoomStatus.PAUSED -> "일시정지"
+                RoomStatus.FINISHED -> "종료"
+            },
             color = Color.White,
-            fontSize = 17.sp
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Bold
         )
 
-        Spacer(Modifier.height(42.dp))
+        Spacer(Modifier.height(38.dp))
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             TimerButton(
@@ -131,6 +139,33 @@ fun TimerScreen(
 }
 
 @Composable
+fun StatusBadge(status: RoomStatus, isRunning: Boolean) {
+    val label = when (status) {
+        RoomStatus.WAITING -> "대기"
+        RoomStatus.RUNNING -> "진행중"
+        RoomStatus.WARNING -> if (isRunning) "5분 이하" else "일시정지"
+        RoomStatus.PAUSED -> "일시정지"
+        RoomStatus.FINISHED -> "종료"
+    }
+
+    val color = when (status) {
+        RoomStatus.WAITING -> Color(0xFF555555)
+        RoomStatus.RUNNING -> Color(0xFF0F4A1E)
+        RoomStatus.WARNING -> Color(0xFF5A1C1C)
+        RoomStatus.PAUSED -> Color(0xFF6A5300)
+        RoomStatus.FINISHED -> Color(0xFF444444)
+    }
+
+    Box(
+        modifier = Modifier
+            .background(color, RoundedCornerShape(999.dp))
+            .padding(horizontal = 18.dp, vertical = 8.dp)
+    ) {
+        Text(label, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
 fun TimerButton(
     text: String,
     color: Color,
@@ -144,5 +179,15 @@ fun TimerButton(
         colors = ButtonDefaults.buttonColors(containerColor = color)
     ) {
         Text(text, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+fun timerColor(status: RoomStatus): Color {
+    return when (status) {
+        RoomStatus.WARNING -> Color(0xFFFF4B4B)
+        RoomStatus.FINISHED -> Color(0xFFFF4B4B)
+        RoomStatus.RUNNING -> Color(0xFF42E66F)
+        RoomStatus.PAUSED -> Color(0xFFFFB000)
+        RoomStatus.WAITING -> Color(0xFFFFB000)
     }
 }

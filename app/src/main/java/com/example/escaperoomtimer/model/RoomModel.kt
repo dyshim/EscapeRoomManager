@@ -12,5 +12,6 @@ enum class RoomStatus {
     WAITING,
     RUNNING,
     WARNING,
+    PAUSED,
     FINISHED
 }

@@ -6,10 +6,10 @@ import com.example.escaperoomtimer.model.RoomStatus
 
 object TimerManager {
     val rooms = mutableStateListOf(
-        RoomInfo("room1", "ROOM 1", 32 * 60 + 45, RoomStatus.RUNNING, isRunning = false),
+        RoomInfo("room1", "ROOM 1", 32 * 60 + 45, RoomStatus.PAUSED, isRunning = false),
         RoomInfo("room2", "ROOM 2", 4 * 60 + 58, RoomStatus.WARNING, isRunning = false),
-        RoomInfo("room3", "ROOM 3", 21 * 60 + 30, RoomStatus.RUNNING, isRunning = false),
-        RoomInfo("room4", "ROOM 4", 0, RoomStatus.WAITING, isRunning = false),
+        RoomInfo("room3", "ROOM 3", 21 * 60 + 30, RoomStatus.PAUSED, isRunning = false),
+        RoomInfo("room4", "ROOM 4", 60 * 60, RoomStatus.WAITING, isRunning = false),
         RoomInfo("room5", "ROOM 5", 0, RoomStatus.FINISHED, isRunning = false)
     )
 
@@ -19,14 +19,15 @@ object TimerManager {
 
     fun startOrPause(roomId: String) {
         updateRoom(roomId) { room ->
-            if (room.status == RoomStatus.FINISHED) return@updateRoom room
+            if (room.status == RoomStatus.FINISHED && room.seconds <= 0) return@updateRoom room
 
             val fixedSeconds = if (room.seconds <= 0) 60 * 60 else room.seconds
             val nextRunning = !room.isRunning
+
             room.copy(
                 seconds = fixedSeconds,
                 isRunning = nextRunning,
-                status = if (nextRunning) statusFromSeconds(fixedSeconds) else RoomStatus.WAITING
+                status = if (nextRunning) runningStatusFromSeconds(fixedSeconds) else RoomStatus.PAUSED
             )
         }
     }
@@ -40,17 +41,21 @@ object TimerManager {
     fun addFiveMinutes(roomId: String) {
         updateRoom(roomId) { room ->
             val nextSeconds = room.seconds + 5 * 60
-            room.copy(seconds = nextSeconds, status = statusFromSeconds(nextSeconds))
+            room.copy(
+                seconds = nextSeconds,
+                status = statusForRoom(nextSeconds, room.isRunning)
+            )
         }
     }
 
     fun minusFiveMinutes(roomId: String) {
         updateRoom(roomId) { room ->
             val nextSeconds = (room.seconds - 5 * 60).coerceAtLeast(0)
+            val nextRunning = room.isRunning && nextSeconds > 0
             room.copy(
                 seconds = nextSeconds,
-                isRunning = if (nextSeconds == 0) false else room.isRunning,
-                status = if (nextSeconds == 0) RoomStatus.FINISHED else statusFromSeconds(nextSeconds)
+                isRunning = nextRunning,
+                status = if (nextSeconds == 0) RoomStatus.FINISHED else statusForRoom(nextSeconds, nextRunning)
             )
         }
     }
@@ -68,7 +73,7 @@ object TimerManager {
                 rooms[index] = room.copy(
                     seconds = nextSeconds,
                     isRunning = nextSeconds > 0,
-                    status = if (nextSeconds == 0) RoomStatus.FINISHED else statusFromSeconds(nextSeconds)
+                    status = if (nextSeconds == 0) RoomStatus.FINISHED else runningStatusFromSeconds(nextSeconds)
                 )
             }
         }
@@ -81,7 +86,15 @@ object TimerManager {
         }
     }
 
-    private fun statusFromSeconds(seconds: Int): RoomStatus {
+    private fun statusForRoom(seconds: Int, isRunning: Boolean): RoomStatus {
+        return when {
+            seconds <= 0 -> RoomStatus.FINISHED
+            isRunning -> runningStatusFromSeconds(seconds)
+            else -> RoomStatus.PAUSED
+        }
+    }
+
+    private fun runningStatusFromSeconds(seconds: Int): RoomStatus {
         return when {
             seconds <= 0 -> RoomStatus.FINISHED
             seconds <= 5 * 60 -> RoomStatus.WARNING
