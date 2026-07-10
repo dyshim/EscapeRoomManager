@@ -19,15 +19,9 @@ import java.util.Locale
 
 class RoomStatusWidgetProvider : AppWidgetProvider() {
 
-    override fun onUpdate(
-        context: Context,
-        appWidgetManager: AppWidgetManager,
-        appWidgetIds: IntArray
-    ) {
+    override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
         TimerManager.initialize(context.applicationContext)
-        appWidgetIds.forEach { appWidgetId ->
-            appWidgetManager.updateAppWidget(appWidgetId, buildViews(context))
-        }
+        appWidgetIds.forEach { updateWidget(context, it) }
     }
 
     override fun onEnabled(context: Context) {
@@ -36,60 +30,59 @@ class RoomStatusWidgetProvider : AppWidgetProvider() {
         updateAll(context)
     }
 
+    override fun onDeleted(context: Context, appWidgetIds: IntArray) {
+        appWidgetIds.forEach { ManagerWidgetStyleRepository.delete(context, it) }
+        super.onDeleted(context, appWidgetIds)
+    }
+
     companion object {
         private val roomNameViewIds = intArrayOf(
-            R.id.widget_room_1_name,
-            R.id.widget_room_2_name,
-            R.id.widget_room_3_name,
-            R.id.widget_room_4_name,
-            R.id.widget_room_5_name
+            R.id.widget_room_1_name, R.id.widget_room_2_name, R.id.widget_room_3_name,
+            R.id.widget_room_4_name, R.id.widget_room_5_name
         )
-
         private val roomTimeViewIds = intArrayOf(
-            R.id.widget_room_1_time,
-            R.id.widget_room_2_time,
-            R.id.widget_room_3_time,
-            R.id.widget_room_4_time,
-            R.id.widget_room_5_time
+            R.id.widget_room_1_time, R.id.widget_room_2_time, R.id.widget_room_3_time,
+            R.id.widget_room_4_time, R.id.widget_room_5_time
         )
-
         private val roomEndViewIds = intArrayOf(
-            R.id.widget_room_1_end,
-            R.id.widget_room_2_end,
-            R.id.widget_room_3_end,
-            R.id.widget_room_4_end,
-            R.id.widget_room_5_end
+            R.id.widget_room_1_end, R.id.widget_room_2_end, R.id.widget_room_3_end,
+            R.id.widget_room_4_end, R.id.widget_room_5_end
         )
 
         fun updateAll(context: Context) {
             val appContext = context.applicationContext
             TimerManager.initialize(appContext)
-
-            val appWidgetManager = AppWidgetManager.getInstance(appContext)
-            val componentName = ComponentName(appContext, RoomStatusWidgetProvider::class.java)
-            val appWidgetIds = appWidgetManager.getAppWidgetIds(componentName)
-
-            appWidgetIds.forEach { appWidgetId ->
-                appWidgetManager.updateAppWidget(appWidgetId, buildViews(appContext))
-            }
+            val manager = AppWidgetManager.getInstance(appContext)
+            val component = ComponentName(appContext, RoomStatusWidgetProvider::class.java)
+            manager.getAppWidgetIds(component).forEach { updateWidget(appContext, it) }
         }
 
-        private fun buildViews(context: Context): RemoteViews {
+        fun updateWidget(context: Context, widgetId: Int) {
+            TimerManager.initialize(context.applicationContext)
+            AppWidgetManager.getInstance(context).updateAppWidget(widgetId, buildViews(context, widgetId))
+        }
+
+        private fun buildViews(context: Context, widgetId: Int): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.widget_room_status)
+            views.setInt(R.id.widget_root, "setBackgroundResource", ManagerWidgetStyleRepository.backgroundRes(ManagerWidgetStyleRepository.load(context, widgetId)))
             val rooms = TimerManager.enabledRooms.take(roomNameViewIds.size)
 
             val openAppIntent = Intent(context, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                    Intent.FLAG_ACTIVITY_CLEAR_TOP
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
-            val openAppPendingIntent = PendingIntent.getActivity(
-                context,
-                2001,
-                openAppIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            views.setOnClickPendingIntent(
+                R.id.widget_content,
+                PendingIntent.getActivity(context, 2001 + widgetId, openAppIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             )
-            views.setOnClickPendingIntent(R.id.widget_root, openAppPendingIntent)
+
+            val configIntent = Intent(context, ManagerWidgetConfigActivity::class.java).apply {
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            views.setOnClickPendingIntent(
+                R.id.widget_settings,
+                PendingIntent.getActivity(context, 5000 + widgetId, configIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            )
 
             roomNameViewIds.indices.forEach { index ->
                 val room = rooms.getOrNull(index)
@@ -105,7 +98,6 @@ class RoomStatusWidgetProvider : AppWidgetProvider() {
                     views.setTextColor(roomTimeViewIds[index], statusColor(room))
                 }
             }
-
             return views
         }
 
@@ -117,24 +109,19 @@ class RoomStatusWidgetProvider : AppWidgetProvider() {
 
         private fun expectedEndText(room: RoomInfo): String = when {
             room.status == RoomStatus.FINISHED || room.seconds <= 0 -> "종료됨"
-            room.isRunning -> {
-                val expectedAt = System.currentTimeMillis() + room.seconds * 1_000L
-                "종료 ${formatExpectedTime(expectedAt)}"
-            }
+            room.isRunning -> "종료 ${formatExpectedTime(System.currentTimeMillis() + room.seconds * 1_000L)}"
             room.status == RoomStatus.PAUSED -> "일시정지"
             else -> "시작 후 표시"
         }
 
-        private fun formatExpectedTime(timeMillis: Long): String {
-            return SimpleDateFormat("a h:mm", Locale.KOREA).format(Date(timeMillis))
-        }
+        private fun formatExpectedTime(timeMillis: Long) = SimpleDateFormat("a h:mm", Locale.KOREA).format(Date(timeMillis))
 
         private fun statusColor(room: RoomInfo): Int = when (room.status) {
             RoomStatus.RUNNING -> 0xFF4CD964.toInt()
             RoomStatus.WARNING -> 0xFFFF4B4B.toInt()
             RoomStatus.PAUSED -> 0xFFFFB000.toInt()
-            RoomStatus.WAITING -> 0xFFB0B0B0.toInt()
-            RoomStatus.FINISHED -> 0xFF777777.toInt()
+            RoomStatus.WAITING -> 0xFFE0E0E0.toInt()
+            RoomStatus.FINISHED -> 0xFF9E9E9E.toInt()
         }
     }
 }
