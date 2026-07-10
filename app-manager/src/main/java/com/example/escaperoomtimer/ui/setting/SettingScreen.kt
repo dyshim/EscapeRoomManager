@@ -115,6 +115,10 @@ fun SettingScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
+                ManagerAlarmSettingsSection()
+            }
+
+            item {
                 Text(
                     text = "테마 프리셋",
                     color = Color.White,

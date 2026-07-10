@@ -48,6 +48,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import com.example.escaperoomdisplay.alarm.DisplayGameEndAlarmController
 import com.example.escaperoomdisplay.network.DisplaySyncManager
 import com.example.escaperoomdisplay.settings.DisplayAdminPreferences
+import com.example.escaperoomdisplay.settings.DisplayAlarmSettingsDialog
 import com.example.escaperoomdisplay.ui.theme.EscapeRoomTimerTheme
 import com.example.escaperoomdisplay.util.openHintApp
 import com.example.escaperoomshared.model.SharedRoomState
@@ -326,6 +327,7 @@ private fun GuestDisplayScreen(
     var showPinDialog by remember { mutableStateOf(false) }
     var showAdminMenu by remember { mutableStateOf(false) }
     var showPinChangeDialog by remember { mutableStateOf(false) }
+    var showAlarmSettingsDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -519,6 +521,10 @@ private fun GuestDisplayScreen(
             onChangePin = {
                 showAdminMenu = false
                 showPinChangeDialog = true
+            },
+            onAlarmSettings = {
+                showAdminMenu = false
+                showAlarmSettingsDialog = true
             }
         )
     }
@@ -527,6 +533,12 @@ private fun GuestDisplayScreen(
         ChangeAdminPinDialog(
             onDismiss = { showPinChangeDialog = false },
             onSaved = { showPinChangeDialog = false }
+        )
+    }
+
+    if (showAlarmSettingsDialog) {
+        DisplayAlarmSettingsDialog(
+            onDismiss = { showAlarmSettingsDialog = false }
         )
     }
 }
@@ -589,7 +601,8 @@ private fun AdminPinDialog(
 private fun AdminMenuDialog(
     onDismiss: () -> Unit,
     onChangeRoom: () -> Unit,
-    onChangePin: () -> Unit
+    onChangePin: () -> Unit,
+    onAlarmSettings: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -601,6 +614,12 @@ private fun AdminMenuDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("방 변경")
+                }
+                OutlinedButton(
+                    onClick = onAlarmSettings,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("알람 설정")
                 }
                 OutlinedButton(
                     onClick = onChangePin,
