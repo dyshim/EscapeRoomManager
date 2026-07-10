@@ -45,6 +45,7 @@ object DisplaySyncManager {
 
     private val tcpClient = DisplayTcpClient(
         onRoomReceived = ::updateRoom,
+        onRoomCatalogReceived = ::applyRoomCatalog,
         onConnectionChanged = { connected ->
             mainHandler.post {
                 _isConnected.value = connected
@@ -209,6 +210,14 @@ object DisplaySyncManager {
             _selectedRoom.value = null
             _lastReceivedAtMillis.value = 0L
         }
+    }
+
+
+    @Synchronized
+    private fun applyRoomCatalog(activeRoomIds: Set<String>) {
+        if (_debugDemoActive.value) return
+        roomsById.keys.retainAll(activeRoomIds)
+        publishCurrentRooms(System.currentTimeMillis())
     }
 
     @Synchronized

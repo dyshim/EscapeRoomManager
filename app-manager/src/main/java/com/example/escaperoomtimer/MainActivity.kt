@@ -7,6 +7,11 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.example.escaperoomtimer.manager.HintProgressManager
@@ -15,11 +20,6 @@ import com.example.escaperoomtimer.service.TimerForegroundService
 import com.example.escaperoomtimer.ui.home.HomeScreen
 import com.example.escaperoomtimer.ui.setting.SettingScreen
 import com.example.escaperoomtimer.ui.timer.TimerScreen
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -29,9 +29,7 @@ class MainActivity : ComponentActivity() {
         requestNotificationPermissionIfNeeded()
         startTimerForegroundService()
 
-        setContent {
-            EscapeRoomManagerApp()
-        }
+        setContent { EscapeRoomManagerApp() }
     }
 
     override fun onStop() {
@@ -40,18 +38,16 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startTimerForegroundService() {
-        val intent = Intent(this, TimerForegroundService::class.java)
-        ContextCompat.startForegroundService(this, intent)
+        ContextCompat.startForegroundService(this, Intent(this, TimerForegroundService::class.java))
     }
 
     private fun requestNotificationPermissionIfNeeded() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val hasPermission = ContextCompat.checkSelfPermission(
+            val granted = ContextCompat.checkSelfPermission(
                 this,
                 Manifest.permission.POST_NOTIFICATIONS
             ) == PackageManager.PERMISSION_GRANTED
-
-            if (!hasPermission) {
+            if (!granted) {
                 ActivityCompat.requestPermissions(
                     this,
                     arrayOf(Manifest.permission.POST_NOTIFICATIONS),
@@ -62,11 +58,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class ScreenMode {
-    HOME,
-    SETTING,
-    STAFF_TIMER
-}
+private enum class ScreenMode { HOME, SETTING, STAFF_TIMER }
 
 @Composable
 fun EscapeRoomManagerApp() {
@@ -74,40 +66,34 @@ fun EscapeRoomManagerApp() {
     var screenMode by remember { mutableStateOf(ScreenMode.HOME) }
 
     when (screenMode) {
-        ScreenMode.HOME -> {
-            HomeScreen(
-                rooms = TimerManager.rooms,
-                onRoomClick = { room ->
-                    selectedRoomId = room.id
-                    screenMode = ScreenMode.STAFF_TIMER
-                },
-                onSettingsClick = {
-                    screenMode = ScreenMode.SETTING
-                }
-            )
-        }
+        ScreenMode.HOME -> HomeScreen(
+            rooms = TimerManager.enabledRooms,
+            onRoomClick = { room ->
+                selectedRoomId = room.id
+                screenMode = ScreenMode.STAFF_TIMER
+            },
+            onSettingsClick = { screenMode = ScreenMode.SETTING },
+            onAddRoom = { name, minutes -> TimerManager.addRoom(name, minutes) }
+        )
 
-        ScreenMode.SETTING -> {
-            SettingScreen(
-                rooms = TimerManager.rooms,
-                onBack = { screenMode = ScreenMode.HOME },
-                onSaveRoom = { roomId, name, defaultMinutes ->
-                    TimerManager.updateRoomSetting(roomId, name, defaultMinutes)
-                }
-            )
-        }
+        ScreenMode.SETTING -> SettingScreen(
+            rooms = TimerManager.rooms,
+            onBack = { screenMode = ScreenMode.HOME },
+            onSaveRoom = TimerManager::updateRoomSetting,
+            onSetRoomEnabled = TimerManager::setRoomEnabled,
+            onDeleteRoom = TimerManager::deleteRoom,
+            onMoveRoom = TimerManager::moveRoom,
+            onAddRoom = TimerManager::addRoom
+        )
 
         ScreenMode.STAFF_TIMER -> {
             val roomId = selectedRoomId
-            if (roomId == null) {
+            val room = roomId?.let(TimerManager::getRoom)
+            if (roomId == null || room == null || !room.isEnabled) {
                 screenMode = ScreenMode.HOME
             } else {
-                TimerScreen(
-                    roomId = roomId,
-                    onBack = { screenMode = ScreenMode.HOME }
-                )
+                TimerScreen(roomId = roomId, onBack = { screenMode = ScreenMode.HOME })
             }
         }
-
     }
 }

@@ -10,9 +10,11 @@ object TcpProtocol {
     const val PORT = 45991
     private const val VERSION = "1"
     private const val SEP = "|"
+    private const val LIST_SEP = ","
 
     sealed interface Message {
         data class RoomState(val room: SharedRoomState) : Message
+        data class RoomCatalog(val activeRoomIds: Set<String>) : Message
         data class HintUsed(val event: HintUsageEvent) : Message
         data class StartRequest(val roomId: String) : Message
         data object Ping : Message
@@ -30,6 +32,12 @@ object TcpProtocol {
         state.updatedAtMillis.toString()
     ).joinToString(SEP)
 
+    fun encodeRoomCatalog(roomIds: Collection<String>): String = listOf(
+        VERSION,
+        "ROOMS",
+        roomIds.takeIf { it.isNotEmpty() }?.joinToString(LIST_SEP) { encode(it) } ?: "-"
+    ).joinToString(SEP)
+
     fun encodeHint(event: HintUsageEvent): String = listOf(
         VERSION,
         "HINT",
@@ -38,12 +46,7 @@ object TcpProtocol {
         event.usedAtMillis.toString()
     ).joinToString(SEP)
 
-    fun encodeStartRequest(roomId: String): String = listOf(
-        VERSION,
-        "START",
-        encode(roomId)
-    ).joinToString(SEP)
-
+    fun encodeStartRequest(roomId: String): String = listOf(VERSION, "START", encode(roomId)).joinToString(SEP)
     fun encodePing(): String = "$VERSION${SEP}PING"
     fun encodePong(): String = "$VERSION${SEP}PONG"
 
@@ -65,6 +68,15 @@ object TcpProtocol {
                     )
                 )
             }
+            "ROOMS" -> {
+                if (fields.size != 3) return null
+                val ids = if (fields[2] == "-" || fields[2].isBlank()) emptySet() else fields[2]
+                    .split(LIST_SEP)
+                    .filter(String::isNotBlank)
+                    .map(::decodeField)
+                    .toSet()
+                Message.RoomCatalog(ids)
+            }
             "HINT" -> {
                 if (fields.size != 5) return null
                 Message.HintUsed(
@@ -85,9 +97,6 @@ object TcpProtocol {
         }
     }.getOrNull()
 
-    private fun encode(value: String): String =
-        URLEncoder.encode(value, StandardCharsets.UTF_8.name())
-
-    private fun decodeField(value: String): String =
-        URLDecoder.decode(value, StandardCharsets.UTF_8.name())
+    private fun encode(value: String): String = URLEncoder.encode(value, StandardCharsets.UTF_8.name())
+    private fun decodeField(value: String): String = URLDecoder.decode(value, StandardCharsets.UTF_8.name())
 }

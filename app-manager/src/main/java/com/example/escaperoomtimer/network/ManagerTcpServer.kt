@@ -17,10 +17,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
 object ManagerTcpServer {
-    private data class Client(
-        val socket: Socket,
-        val writer: BufferedWriter
-    )
+    private data class Client(val socket: Socket, val writer: BufferedWriter)
 
     private val running = AtomicBoolean(false)
     private val clients = ConcurrentHashMap.newKeySet<Client>()
@@ -31,8 +28,7 @@ object ManagerTcpServer {
         Thread(runnable, "manager-tcp-client").apply { isDaemon = true }
     }
 
-    @Volatile
-    private var serverSocket: ServerSocket? = null
+    @Volatile private var serverSocket: ServerSocket? = null
 
     @Synchronized
     fun start() {
@@ -50,19 +46,26 @@ object ManagerTcpServer {
 
     fun broadcastRooms(rooms: List<RoomInfo>) {
         if (!running.get()) return
+        val activeRooms = rooms.filter { it.isEnabled }
         val now = System.currentTimeMillis()
-        val lines = rooms.map { room ->
-            TcpProtocol.encodeRoom(
-                SharedRoomState(
-                    id = room.id,
-                    name = room.name,
-                    seconds = room.seconds,
-                    status = room.status.name,
-                    isRunning = room.isRunning,
-                    updatedAtMillis = now
+        val lines = buildList {
+            add(TcpProtocol.encodeRoomCatalog(activeRooms.map { it.id }))
+            activeRooms.forEach { room ->
+                add(
+                    TcpProtocol.encodeRoom(
+                        SharedRoomState(
+                            id = room.id,
+                            name = room.name,
+                            seconds = room.seconds,
+                            status = room.status.name,
+                            isRunning = room.isRunning,
+                            updatedAtMillis = now
+                        )
+                    )
                 )
-            )
+            }
         }
+
         clients.toList().forEach { client ->
             runCatching {
                 synchronized(client.writer) {
@@ -86,22 +89,38 @@ object ManagerTcpServer {
                         tcpNoDelay = true
                         keepAlive = true
                     }
-                    val client = Client(
-                        socket = socket,
-                        writer = BufferedWriter(OutputStreamWriter(socket.getOutputStream()))
-                    )
+                    val client = Client(socket, BufferedWriter(OutputStreamWriter(socket.getOutputStream())))
                     clients += client
                     clientExecutor.execute { readClient(client) }
+                    sendCurrentRooms(client)
                 }
             }
         } catch (_: SocketException) {
-            // Expected when the service stops.
         } catch (_: Exception) {
-            // Keep the manager app alive even if the network is temporarily unavailable.
         } finally {
             serverSocket = null
             running.set(false)
         }
+    }
+
+    private fun sendCurrentRooms(client: Client) {
+        val active = TimerManager.enabledRooms
+        val now = System.currentTimeMillis()
+        runCatching {
+            synchronized(client.writer) {
+                client.writer.write(TcpProtocol.encodeRoomCatalog(active.map { it.id }))
+                client.writer.newLine()
+                active.forEach { room ->
+                    client.writer.write(
+                        TcpProtocol.encodeRoom(
+                            SharedRoomState(room.id, room.name, room.seconds, room.status.name, room.isRunning, now)
+                        )
+                    )
+                    client.writer.newLine()
+                }
+                client.writer.flush()
+            }
+        }.onFailure { removeClient(client) }
     }
 
     private fun readClient(client: Client) {
@@ -109,9 +128,7 @@ object ManagerTcpServer {
             BufferedReader(InputStreamReader(client.socket.getInputStream())).useLines { lines ->
                 lines.forEach { line ->
                     when (val message = TcpProtocol.decode(line)) {
-                        is TcpProtocol.Message.HintUsed -> {
-                            HintProgressManager.recordHintUsage(message.event)
-                        }
+                        is TcpProtocol.Message.HintUsed -> HintProgressManager.recordHintUsage(message.event)
                         is TcpProtocol.Message.StartRequest -> {
                             TimerManager.start(message.roomId)
                             broadcastRooms(TimerManager.rooms)
@@ -122,7 +139,6 @@ object ManagerTcpServer {
                 }
             }
         } catch (_: Exception) {
-            // The client will reconnect automatically.
         } finally {
             removeClient(client)
         }

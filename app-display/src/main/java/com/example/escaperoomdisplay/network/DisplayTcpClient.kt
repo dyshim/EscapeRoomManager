@@ -1,6 +1,7 @@
 package com.example.escaperoomdisplay.network
 
 import com.example.escaperoomshared.model.HintUsageEvent
+import com.example.escaperoomshared.model.SharedRoomState
 import com.example.escaperoomshared.network.TcpProtocol
 import java.io.BufferedReader
 import java.io.BufferedWriter
@@ -11,7 +12,8 @@ import java.net.Socket
 import java.util.concurrent.atomic.AtomicBoolean
 
 class DisplayTcpClient(
-    private val onRoomReceived: (com.example.escaperoomshared.model.SharedRoomState) -> Unit,
+    private val onRoomReceived: (SharedRoomState) -> Unit,
+    private val onRoomCatalogReceived: (Set<String>) -> Unit,
     private val onConnectionChanged: (Boolean) -> Unit
 ) {
     private val running = AtomicBoolean(false)
@@ -26,10 +28,7 @@ class DisplayTcpClient(
         host = serverHost.trim()
         if (host.isBlank()) return
         if (running.compareAndSet(false, true)) {
-            worker = Thread(::connectionLoop, "display-tcp-client").apply {
-                isDaemon = true
-                start()
-            }
+            worker = Thread(::connectionLoop, "display-tcp-client").apply { isDaemon = true; start() }
         } else {
             closeSocket()
         }
@@ -42,27 +41,9 @@ class DisplayTcpClient(
         onConnectionChanged(false)
     }
 
+    fun sendStartRequest(roomId: String): Boolean = roomId.isNotBlank() && sendRawChecked(TcpProtocol.encodeStartRequest(roomId))
 
-    fun sendStartRequest(roomId: String): Boolean {
-        if (roomId.isBlank()) return false
-        return sendRawChecked(TcpProtocol.encodeStartRequest(roomId))
-    }
-
-    fun sendHint(event: HintUsageEvent): Boolean {
-        val line = TcpProtocol.encodeHint(event)
-        return runCatching {
-            val currentWriter = writer ?: return false
-            synchronized(sendLock) {
-                currentWriter.write(line)
-                currentWriter.newLine()
-                currentWriter.flush()
-            }
-            true
-        }.getOrElse {
-            closeSocket()
-            false
-        }
-    }
+    fun sendHint(event: HintUsageEvent): Boolean = sendRawChecked(TcpProtocol.encodeHint(event))
 
     private fun connectionLoop() {
         while (running.get()) {
@@ -79,6 +60,7 @@ class DisplayTcpClient(
                         lines.forEach { line ->
                             when (val message = TcpProtocol.decode(line)) {
                                 is TcpProtocol.Message.RoomState -> onRoomReceived(message.room)
+                                is TcpProtocol.Message.RoomCatalog -> onRoomCatalogReceived(message.activeRoomIds)
                                 TcpProtocol.Message.Ping -> sendRaw(TcpProtocol.encodePong())
                                 else -> Unit
                             }
@@ -86,33 +68,26 @@ class DisplayTcpClient(
                     }
                 }
             } catch (_: Exception) {
-                // Retry below.
             } finally {
                 writer = null
                 socket = null
                 onConnectionChanged(false)
             }
-
-            if (running.get()) {
-                try { Thread.sleep(2_000L) } catch (_: InterruptedException) { }
-            }
+            if (running.get()) try { Thread.sleep(2_000L) } catch (_: InterruptedException) { }
         }
     }
 
-
-    private fun sendRawChecked(line: String): Boolean {
-        return runCatching {
-            val currentWriter = writer ?: return false
-            synchronized(sendLock) {
-                currentWriter.write(line)
-                currentWriter.newLine()
-                currentWriter.flush()
-            }
-            true
-        }.getOrElse {
-            closeSocket()
-            false
+    private fun sendRawChecked(line: String): Boolean = runCatching {
+        val currentWriter = writer ?: return false
+        synchronized(sendLock) {
+            currentWriter.write(line)
+            currentWriter.newLine()
+            currentWriter.flush()
         }
+        true
+    }.getOrElse {
+        closeSocket()
+        false
     }
 
     private fun sendRaw(line: String) {

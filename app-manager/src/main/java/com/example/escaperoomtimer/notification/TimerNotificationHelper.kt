@@ -74,9 +74,9 @@ object TimerNotificationHelper {
     }
 
     private fun selectNotificationRoom(): RoomInfo? {
-        return TimerManager.rooms.firstOrNull { it.isRunning }
-            ?: TimerManager.rooms.firstOrNull { it.status == RoomStatus.WARNING }
-            ?: TimerManager.rooms.firstOrNull { it.status == RoomStatus.PAUSED }
-            ?: TimerManager.rooms.firstOrNull()
+        return TimerManager.enabledRooms.firstOrNull { it.isRunning }
+            ?: TimerManager.enabledRooms.firstOrNull { it.status == RoomStatus.WARNING }
+            ?: TimerManager.enabledRooms.firstOrNull { it.status == RoomStatus.PAUSED }
+            ?: TimerManager.enabledRooms.firstOrNull()
     }
 }

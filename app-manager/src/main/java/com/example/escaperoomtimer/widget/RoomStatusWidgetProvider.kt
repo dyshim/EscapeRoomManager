@@ -76,7 +76,7 @@ class RoomStatusWidgetProvider : AppWidgetProvider() {
 
         private fun buildViews(context: Context): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.widget_room_status)
-            val rooms = TimerManager.rooms.take(roomNameViewIds.size)
+            val rooms = TimerManager.enabledRooms.take(roomNameViewIds.size)
 
             val openAppIntent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or

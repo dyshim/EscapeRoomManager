@@ -23,6 +23,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -50,15 +51,17 @@ import java.util.UUID
 fun SettingScreen(
     rooms: List<RoomInfo>,
     onBack: () -> Unit,
-    onSaveRoom: (roomId: String, name: String, defaultMinutes: Int) -> Unit
+    onSaveRoom: (roomId: String, name: String, defaultMinutes: Int) -> Unit,
+    onSetRoomEnabled: (roomId: String, enabled: Boolean) -> Boolean,
+    onDeleteRoom: (roomId: String) -> Boolean,
+    onMoveRoom: (roomId: String, direction: Int) -> Boolean,
+    onAddRoom: (name: String, defaultMinutes: Int) -> String
 ) {
     val context = LocalContext.current
     val nameInputs = remember { mutableStateMapOf<String, String>() }
     val minuteInputs = remember { mutableStateMapOf<String, String>() }
     val presets = remember {
-        mutableStateListOf<ThemePreset>().apply {
-            addAll(ThemePresetRepository.load(context))
-        }
+        mutableStateListOf<ThemePreset>().apply { addAll(ThemePresetRepository.load(context)) }
     }
 
     var presetName by remember { mutableStateOf("") }
@@ -66,18 +69,22 @@ fun SettingScreen(
     var presetEmoji by remember { mutableStateOf("🎭") }
     var editingPresetId by remember { mutableStateOf<String?>(null) }
     var roomForPresetDialog by remember { mutableStateOf<RoomInfo?>(null) }
+    var roomToDelete by remember { mutableStateOf<RoomInfo?>(null) }
+    var showAddRoomDialog by remember { mutableStateOf(false) }
+    var newRoomName by remember { mutableStateOf("") }
+    var newRoomMinutes by remember { mutableStateOf("60") }
 
-    LaunchedEffect(rooms.size) {
+    LaunchedEffect(rooms.map { it.id to it.name }) {
         rooms.forEach { room ->
             if (nameInputs[room.id] == null) nameInputs[room.id] = room.name
             if (minuteInputs[room.id] == null) minuteInputs[room.id] = room.defaultMinutes.toString()
         }
+        val ids = rooms.mapTo(mutableSetOf()) { it.id }
+        nameInputs.keys.toList().filterNot(ids::contains).forEach { nameInputs.remove(it) }
+        minuteInputs.keys.toList().filterNot(ids::contains).forEach { minuteInputs.remove(it) }
     }
 
-    fun persistPresets() {
-        ThemePresetRepository.save(context, presets)
-    }
-
+    fun persistPresets() = ThemePresetRepository.save(context, presets)
     fun clearPresetEditor() {
         editingPresetId = null
         presetName = ""
@@ -96,12 +103,7 @@ fun SettingScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "←",
-                color = Color.White,
-                fontSize = 28.sp,
-                modifier = Modifier.clickable { onBack() }
-            )
+            Text("←", color = Color.White, fontSize = 28.sp, modifier = Modifier.clickable(onClick = onBack))
             Text("방·테마 설정", color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Bold)
             Text("", fontSize = 15.sp)
         }
@@ -114,22 +116,11 @@ fun SettingScreen(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            item {
-                ManagerAlarmSettingsSection()
-            }
+            item { ManagerAlarmSettingsSection() }
 
             item {
-                Text(
-                    text = "테마 프리셋",
-                    color = Color.White,
-                    fontSize = 19.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "테마 이름과 기본 시간을 저장해 방에 빠르게 적용할 수 있어요.",
-                    color = Color(0xFF8D96A0),
-                    fontSize = 13.sp
-                )
+                Text("테마 프리셋", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                Text("테마 이름과 기본 시간을 저장해 방에 빠르게 적용할 수 있어요.", color = Color(0xFF8D96A0), fontSize = 13.sp)
             }
 
             item {
@@ -139,10 +130,8 @@ fun SettingScreen(
                     presetEmoji = presetEmoji,
                     isEditing = editingPresetId != null,
                     onNameChange = { presetName = it },
-                    onMinutesChange = { value ->
-                        presetMinutes = value.filter(Char::isDigit).take(3)
-                    },
-                    onEmojiChange = { value -> presetEmoji = value.take(4) },
+                    onMinutesChange = { presetMinutes = it.filter(Char::isDigit).take(3) },
+                    onEmojiChange = { presetEmoji = it.take(4) },
                     onSave = {
                         val cleanName = presetName.trim()
                         val minutes = presetMinutes.toIntOrNull()?.coerceIn(1, 240)
@@ -150,7 +139,6 @@ fun SettingScreen(
                             Toast.makeText(context, "테마 이름과 시간을 확인해 주세요.", Toast.LENGTH_SHORT).show()
                             return@PresetEditorCard
                         }
-
                         val existingIndex = presets.indexOfFirst { it.id == editingPresetId }
                         val preset = ThemePreset(
                             id = editingPresetId ?: UUID.randomUUID().toString(),
@@ -158,18 +146,11 @@ fun SettingScreen(
                             defaultMinutes = minutes,
                             emoji = presetEmoji.ifBlank { "🎭" }
                         )
-
-                        if (existingIndex >= 0) {
-                            presets[existingIndex] = preset
-                            Toast.makeText(context, "프리셋 수정 완료", Toast.LENGTH_SHORT).show()
-                        } else {
-                            presets.add(preset)
-                            Toast.makeText(context, "프리셋 추가 완료", Toast.LENGTH_SHORT).show()
-                        }
+                        if (existingIndex >= 0) presets[existingIndex] = preset else presets.add(preset)
                         persistPresets()
                         clearPresetEditor()
                     },
-                    onCancel = { clearPresetEditor() }
+                    onCancel = ::clearPresetEditor
                 )
             }
 
@@ -180,11 +161,7 @@ fun SettingScreen(
                         colors = CardDefaults.cardColors(containerColor = Color(0xFF171C20)),
                         shape = RoundedCornerShape(14.dp)
                     ) {
-                        Text(
-                            text = "아직 저장된 테마 프리셋이 없어요.",
-                            color = Color(0xFF9AA3AC),
-                            modifier = Modifier.padding(16.dp)
-                        )
+                        Text("아직 저장된 테마 프리셋이 없어요.", color = Color(0xFF9AA3AC), modifier = Modifier.padding(16.dp))
                     }
                 }
             } else {
@@ -201,7 +178,6 @@ fun SettingScreen(
                             presets.removeAll { it.id == preset.id }
                             persistPresets()
                             if (editingPresetId == preset.id) clearPresetEditor()
-                            Toast.makeText(context, "프리셋 삭제 완료", Toast.LENGTH_SHORT).show()
                         }
                     )
                 }
@@ -211,12 +187,24 @@ fun SettingScreen(
                 Spacer(Modifier.height(4.dp))
                 HorizontalDivider(color = Color(0xFF2A2F35))
                 Spacer(Modifier.height(4.dp))
-                Text(
-                    text = "방 설정",
-                    color = Color.White,
-                    fontSize = 19.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("방 관리", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                        Text("사용 여부, 순서, 이름과 기본 시간을 관리합니다.", color = Color(0xFF8D96A0), fontSize = 12.sp)
+                    }
+                    Button(
+                        onClick = {
+                            newRoomName = "ROOM ${rooms.size + 1}"
+                            newRoomMinutes = "60"
+                            showAddRoomDialog = true
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF7A00))
+                    ) { Text("+ 추가") }
+                }
             }
 
             items(rooms, key = { it.id }) { room ->
@@ -226,16 +214,22 @@ fun SettingScreen(
                     minutesValue = minuteInputs[room.id] ?: room.defaultMinutes.toString(),
                     hasPresets = presets.isNotEmpty(),
                     onNameChange = { nameInputs[room.id] = it },
-                    onMinutesChange = { value ->
-                        minuteInputs[room.id] = value.filter(Char::isDigit).take(3)
-                    },
+                    onMinutesChange = { minuteInputs[room.id] = it.filter(Char::isDigit).take(3) },
                     onChoosePreset = { roomForPresetDialog = room },
                     onSave = {
                         val minutes = minuteInputs[room.id]?.toIntOrNull() ?: room.defaultMinutes
                         val name = nameInputs[room.id] ?: room.name
                         onSaveRoom(room.id, name, minutes)
-                        Toast.makeText(context, "$name 저장 완료", Toast.LENGTH_SHORT).show()
-                    }
+                        Toast.makeText(context, "${name.trim()} 저장 완료", Toast.LENGTH_SHORT).show()
+                    },
+                    onEnabledChange = { enabled ->
+                        if (!onSetRoomEnabled(room.id, enabled)) {
+                            Toast.makeText(context, "진행 중인 방은 비활성화할 수 없습니다.", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    onMoveUp = { onMoveRoom(room.id, -1) },
+                    onMoveDown = { onMoveRoom(room.id, 1) },
+                    onDelete = { roomToDelete = room }
                 )
             }
         }
@@ -244,7 +238,7 @@ fun SettingScreen(
     roomForPresetDialog?.let { room ->
         AlertDialog(
             onDismissRequest = { roomForPresetDialog = null },
-            title = { Text("${room.id.uppercase()}에 적용할 테마") },
+            title = { Text("${room.name}에 적용할 테마") },
             text = {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(presets, key = { it.id }) { preset ->
@@ -254,24 +248,70 @@ fun SettingScreen(
                                 minuteInputs[room.id] = preset.defaultMinutes.toString()
                                 onSaveRoom(room.id, preset.name, preset.defaultMinutes)
                                 roomForPresetDialog = null
-                                Toast.makeText(
-                                    context,
-                                    "${preset.emoji} ${preset.name} 적용 완료",
-                                    Toast.LENGTH_SHORT
-                                ).show()
                             },
                             modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("${preset.emoji} ${preset.name} · ${preset.defaultMinutes}분")
-                        }
+                        ) { Text("${preset.emoji} ${preset.name} · ${preset.defaultMinutes}분") }
                     }
                 }
             },
+            confirmButton = { TextButton(onClick = { roomForPresetDialog = null }) { Text("닫기") } }
+        )
+    }
+
+    roomToDelete?.let { room ->
+        AlertDialog(
+            onDismissRequest = { roomToDelete = null },
+            title = { Text("방 삭제") },
+            text = { Text("${room.name}을(를) 삭제할까요? 저장된 타이머 상태도 함께 삭제됩니다.") },
             confirmButton = {
-                TextButton(onClick = { roomForPresetDialog = null }) {
-                    Text("닫기")
+                TextButton(onClick = {
+                    if (onDeleteRoom(room.id)) {
+                        Toast.makeText(context, "${room.name} 삭제 완료", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, "진행 중인 방 또는 마지막 남은 방은 삭제할 수 없습니다.", Toast.LENGTH_LONG).show()
+                    }
+                    roomToDelete = null
+                }) { Text("삭제", color = Color(0xFFFF4B4B)) }
+            },
+            dismissButton = { TextButton(onClick = { roomToDelete = null }) { Text("취소") } }
+        )
+    }
+
+    if (showAddRoomDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddRoomDialog = false },
+            title = { Text("새 방 추가") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = newRoomName,
+                        onValueChange = { newRoomName = it },
+                        label = { Text("방 이름") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = newRoomMinutes,
+                        onValueChange = { newRoomMinutes = it.filter(Char::isDigit).take(3) },
+                        label = { Text("기본 시간(분)") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
-            }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val minutes = newRoomMinutes.toIntOrNull()?.coerceIn(1, 240)
+                    if (newRoomName.trim().isBlank() || minutes == null) {
+                        Toast.makeText(context, "방 이름과 시간을 확인해 주세요.", Toast.LENGTH_SHORT).show()
+                    } else {
+                        onAddRoom(newRoomName, minutes)
+                        showAddRoomDialog = false
+                    }
+                }) { Text("추가") }
+            },
+            dismissButton = { TextButton(onClick = { showAddRoomDialog = false }) { Text("취소") } }
         )
     }
 }
@@ -294,30 +334,12 @@ private fun PresetEditorCard(
         colors = CardDefaults.cardColors(containerColor = Color(0xFF171C20))
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
-            Text(
-                text = if (isEditing) "프리셋 수정" else "새 프리셋 추가",
-                color = Color(0xFFFFB000),
-                fontWeight = FontWeight.Bold
-            )
+            Text(if (isEditing) "프리셋 수정" else "새 프리셋 추가", color = Color(0xFFFFB000), fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(10.dp))
-
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = presetEmoji,
-                    onValueChange = onEmojiChange,
-                    modifier = Modifier.weight(0.28f),
-                    singleLine = true,
-                    label = { Text("아이콘") }
-                )
-                OutlinedTextField(
-                    value = presetName,
-                    onValueChange = onNameChange,
-                    modifier = Modifier.weight(0.72f),
-                    singleLine = true,
-                    label = { Text("테마 이름") }
-                )
+                OutlinedTextField(value = presetEmoji, onValueChange = onEmojiChange, modifier = Modifier.weight(0.28f), singleLine = true, label = { Text("아이콘") })
+                OutlinedTextField(value = presetName, onValueChange = onNameChange, modifier = Modifier.weight(0.72f), singleLine = true, label = { Text("테마 이름") })
             }
-
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = presetMinutes,
@@ -327,57 +349,31 @@ private fun PresetEditorCard(
                 label = { Text("기본 시간(분)") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
             )
-
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = onSave,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF7A00))
-                ) {
+                Button(onClick = onSave, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF7A00))) {
                     Text(if (isEditing) "수정 저장" else "프리셋 추가")
                 }
-                if (isEditing) {
-                    OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) {
-                        Text("취소")
-                    }
-                }
+                if (isEditing) OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("취소") }
             }
         }
     }
 }
 
 @Composable
-private fun PresetCard(
-    preset: ThemePreset,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit
-) {
+private fun PresetCard(preset: ThemePreset, onEdit: () -> Unit, onDelete: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF171C20))
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
-            Text(
-                text = "${preset.emoji} ${preset.name}",
-                color = Color.White,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = "기본 ${preset.defaultMinutes}분",
-                color = Color(0xFF9AA3AC),
-                fontSize = 13.sp
-            )
+            Text("${preset.emoji} ${preset.name}", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            Text("기본 ${preset.defaultMinutes}분", color = Color(0xFF9AA3AC), fontSize = 13.sp)
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onEdit, modifier = Modifier.weight(1f)) {
-                    Text("수정")
-                }
-                OutlinedButton(onClick = onDelete, modifier = Modifier.weight(1f)) {
-                    Text("삭제", color = Color(0xFFFF6B6B))
-                }
+                OutlinedButton(onClick = onEdit, modifier = Modifier.weight(1f)) { Text("수정") }
+                OutlinedButton(onClick = onDelete, modifier = Modifier.weight(1f)) { Text("삭제", color = Color(0xFFFF6B6B)) }
             }
         }
     }
@@ -392,44 +388,38 @@ private fun RoomSettingCard(
     onNameChange: (String) -> Unit,
     onMinutesChange: (String) -> Unit,
     onChoosePreset: () -> Unit,
-    onSave: () -> Unit
+    onSave: () -> Unit,
+    onEnabledChange: (Boolean) -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
+    onDelete: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF171C20)),
+        colors = CardDefaults.cardColors(containerColor = if (room.isEnabled) Color(0xFF171C20) else Color(0xFF111417)),
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
-            Text(
-                text = room.id.uppercase(),
-                color = Color(0xFFFFB000),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold
-            )
-
-            Spacer(Modifier.height(10.dp))
-
-            OutlinedButton(
-                onClick = onChoosePreset,
-                enabled = hasPresets,
-                modifier = Modifier.fillMaxWidth()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(if (hasPresets) "테마 프리셋 적용" else "먼저 프리셋을 추가하세요")
+                Column {
+                    Text(room.id.uppercase(), color = Color(0xFFFFB000), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Text(if (room.isEnabled) "사용 중" else "사용 안 함", color = if (room.isEnabled) Color(0xFF44D17A) else Color(0xFF8D96A0), fontSize = 12.sp)
+                }
+                Switch(checked = room.isEnabled, onCheckedChange = onEnabledChange, enabled = !room.isRunning)
             }
 
             Spacer(Modifier.height(10.dp))
-
-            OutlinedTextField(
-                value = nameValue,
-                onValueChange = onNameChange,
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                label = { Text("방 이름") }
-            )
-
+            OutlinedButton(onClick = onChoosePreset, enabled = hasPresets, modifier = Modifier.fillMaxWidth()) {
+                Text(if (hasPresets) "테마 프리셋 적용" else "먼저 프리셋을 추가하세요")
+            }
             Spacer(Modifier.height(10.dp))
-
+            OutlinedTextField(value = nameValue, onValueChange = onNameChange, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("방 이름") })
+            Spacer(Modifier.height(10.dp))
             OutlinedTextField(
                 value = minutesValue,
                 onValueChange = onMinutesChange,
@@ -438,18 +428,21 @@ private fun RoomSettingCard(
                 label = { Text("기본 시간(분)") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
             )
-
             Spacer(Modifier.height(12.dp))
-
             Button(
                 onClick = onSave,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
+                modifier = Modifier.fillMaxWidth().height(50.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF7A00))
-            ) {
-                Text("저장", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            ) { Text("저장", color = Color.White, fontWeight = FontWeight.Bold) }
+
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedButton(onClick = onMoveUp, modifier = Modifier.weight(1f)) { Text("↑ 위") }
+                OutlinedButton(onClick = onMoveDown, modifier = Modifier.weight(1f)) { Text("↓ 아래") }
+                OutlinedButton(onClick = onDelete, modifier = Modifier.weight(1f), enabled = !room.isRunning) {
+                    Text("삭제", color = Color(0xFFFF6B6B))
+                }
             }
         }
     }

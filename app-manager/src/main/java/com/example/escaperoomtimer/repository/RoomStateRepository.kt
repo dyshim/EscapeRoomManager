@@ -6,11 +6,6 @@ import com.example.escaperoomtimer.model.RoomStatus
 import org.json.JSONArray
 import org.json.JSONObject
 
-/**
- * Persists room configuration and timer state without requiring an extra library.
- * Running timers are restored using the saved wall-clock timestamp, so time that
- * passed while the app was closed is reflected when the app is opened again.
- */
 object RoomStateRepository {
     private const val PREFS_NAME = "escape_room_timer_state"
     private const val KEY_ROOMS = "rooms_json"
@@ -18,20 +13,18 @@ object RoomStateRepository {
 
     fun save(context: Context, rooms: List<RoomInfo>) {
         val jsonArray = JSONArray()
-
         rooms.forEach { room ->
-            jsonArray.put(
-                JSONObject().apply {
-                    put("id", room.id)
-                    put("name", room.name)
-                    put("seconds", room.seconds)
-                    put("status", room.status.name)
-                    put("isRunning", room.isRunning)
-                    put("defaultMinutes", room.defaultMinutes)
-                    put("hintEnabled", room.hintEnabled)
-                    put("guestScreenEnabled", room.guestScreenEnabled)
-                }
-            )
+            jsonArray.put(JSONObject().apply {
+                put("id", room.id)
+                put("name", room.name)
+                put("seconds", room.seconds)
+                put("status", room.status.name)
+                put("isRunning", room.isRunning)
+                put("defaultMinutes", room.defaultMinutes)
+                put("hintEnabled", room.hintEnabled)
+                put("guestScreenEnabled", room.guestScreenEnabled)
+                put("isEnabled", room.isEnabled)
+            })
         }
 
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -57,11 +50,7 @@ object RoomStateRepository {
                     val item = array.getJSONObject(index)
                     val wasRunning = item.optBoolean("isRunning", false)
                     val savedSeconds = item.optInt("seconds", 0).coerceAtLeast(0)
-                    val restoredSeconds = if (wasRunning) {
-                        (savedSeconds - elapsedSeconds).coerceAtLeast(0)
-                    } else {
-                        savedSeconds
-                    }
+                    val restoredSeconds = if (wasRunning) (savedSeconds - elapsedSeconds).coerceAtLeast(0) else savedSeconds
                     val restoredRunning = wasRunning && restoredSeconds > 0
 
                     add(
@@ -77,7 +66,8 @@ object RoomStateRepository {
                             isRunning = restoredRunning,
                             defaultMinutes = item.optInt("defaultMinutes", 60).coerceIn(1, 240),
                             hintEnabled = item.optBoolean("hintEnabled", true),
-                            guestScreenEnabled = item.optBoolean("guestScreenEnabled", true)
+                            guestScreenEnabled = item.optBoolean("guestScreenEnabled", true),
+                            isEnabled = item.optBoolean("isEnabled", true)
                         )
                     )
                 }
@@ -85,22 +75,15 @@ object RoomStateRepository {
         }.getOrNull()?.takeIf { it.isNotEmpty() }
     }
 
-    private fun restoredStatus(
-        storedStatus: String,
-        seconds: Int,
-        isRunning: Boolean
-    ): RoomStatus {
+    private fun restoredStatus(storedStatus: String, seconds: Int, isRunning: Boolean): RoomStatus {
         if (seconds <= 0) return RoomStatus.FINISHED
-        if (isRunning) {
-            return if (seconds <= 5 * 60) RoomStatus.WARNING else RoomStatus.RUNNING
-        }
+        if (isRunning) return if (seconds <= 5 * 60) RoomStatus.WARNING else RoomStatus.RUNNING
 
         return runCatching { RoomStatus.valueOf(storedStatus) }
             .getOrDefault(RoomStatus.PAUSED)
             .let { status ->
                 when (status) {
-                    RoomStatus.RUNNING, RoomStatus.WARNING -> RoomStatus.PAUSED
-                    RoomStatus.FINISHED -> RoomStatus.PAUSED
+                    RoomStatus.RUNNING, RoomStatus.WARNING, RoomStatus.FINISHED -> RoomStatus.PAUSED
                     else -> status
                 }
             }
