@@ -8,6 +8,7 @@ import android.os.Looper
 import androidx.core.app.NotificationManagerCompat
 import com.example.escaperoomtimer.manager.TimerManager
 import com.example.escaperoomtimer.notification.TimerNotificationHelper
+import com.example.escaperoomtimer.network.RoomStateBroadcaster
 import com.example.escaperoomtimer.widget.RoomStatusWidgetProvider
 
 class TimerForegroundService : Service() {
@@ -51,5 +52,6 @@ class TimerForegroundService : Service() {
             TimerNotificationHelper.buildTimerNotification(this)
         )
         RoomStatusWidgetProvider.updateAll(this)
+        RoomStateBroadcaster.broadcast(TimerManager.rooms)
     }
 }

@@ -25,3 +25,5 @@ dependencyResolutionManagement {
 rootProject.name = "EscapeRoomSuite"
 include(":app-manager")
 include(":app-display")
+
+include(":shared")
