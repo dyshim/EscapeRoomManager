@@ -19,14 +19,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.escaperoomtimer.manager.TimerManager
 import com.example.escaperoomtimer.model.RoomStatus
 import com.example.escaperoomtimer.util.formatTime
-import com.example.escaperoomtimer.util.openHintApp
 
 @Composable
 fun TimerScreen(
@@ -34,7 +32,6 @@ fun TimerScreen(
     onBack: () -> Unit,
     onGuestClick: () -> Unit
 ) {
-    val context = LocalContext.current
     val room = TimerManager.getRoom(roomId) ?: return
 
     Column(
@@ -139,12 +136,27 @@ fun TimerScreen(
 
         Spacer(Modifier.height(12.dp))
 
-        TimerButton(
-            text = "📱 힌트앱 실행",
-            color = Color(0xFF5E2B86),
-            modifier = Modifier.fillMaxWidth(),
-            onClick = { openHintApp(context) }
-        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFF231B2D), RoundedCornerShape(12.dp))
+                .padding(horizontal = 18.dp, vertical = 16.dp)
+        ) {
+            Column {
+                Text(
+                    text = "힌트 진행도",
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "손님용 앱 연동 준비 중",
+                    color = Color(0xFFB9A7C9),
+                    fontSize = 14.sp
+                )
+            }
+        }
     }
 }
 
