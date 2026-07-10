@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import androidx.core.app.NotificationManagerCompat
+import com.example.escaperoomtimer.manager.HintProgressManager
 import com.example.escaperoomtimer.manager.TimerManager
 import com.example.escaperoomtimer.notification.TimerNotificationHelper
 import com.example.escaperoomtimer.network.RoomStateBroadcaster
@@ -25,6 +26,7 @@ class TimerForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         TimerManager.initialize(applicationContext)
+        HintProgressManager.start(applicationContext)
         TimerNotificationHelper.createChannel(this)
         startForeground(
             TimerNotificationHelper.NOTIFICATION_ID,
@@ -40,6 +42,7 @@ class TimerForegroundService : Service() {
 
     override fun onDestroy() {
         TimerManager.persistNow()
+        HintProgressManager.stop()
         handler.removeCallbacks(ticker)
         super.onDestroy()
     }

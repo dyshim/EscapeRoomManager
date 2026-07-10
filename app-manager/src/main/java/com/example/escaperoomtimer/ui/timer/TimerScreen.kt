@@ -22,9 +22,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.escaperoomtimer.manager.HintProgressManager
 import com.example.escaperoomtimer.manager.TimerManager
 import com.example.escaperoomtimer.model.RoomStatus
 import com.example.escaperoomtimer.util.formatTime
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun TimerScreen(
@@ -32,6 +36,7 @@ fun TimerScreen(
     onBack: () -> Unit
 ) {
     val room = TimerManager.getRoom(roomId) ?: return
+    val hintProgress = HintProgressManager.progressByRoom[roomId]
 
     Column(
         modifier = Modifier
@@ -134,17 +139,42 @@ fun TimerScreen(
         ) {
             Column {
                 Text(
-                    text = "힌트 진행도",
+                    text = "힌트 사용 기록",
                     color = Color.White,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold
                 )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = "손님용 앱 연동 준비 중",
-                    color = Color(0xFFB9A7C9),
-                    fontSize = 14.sp
-                )
+                Spacer(Modifier.height(6.dp))
+
+                if (hintProgress == null || hintProgress.useCount == 0) {
+                    Text(
+                        text = "아직 사용한 힌트가 없습니다.",
+                        color = Color(0xFFB9A7C9),
+                        fontSize = 14.sp
+                    )
+                } else {
+                    Text(
+                        text = "최근 사용: ${hintProgress.lastHintNumber}번 힌트",
+                        color = Color(0xFFD7C8E5),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        text = "총 ${hintProgress.useCount}회 · ${formatHintUsedAt(hintProgress.lastUsedAtMillis)}",
+                        color = Color(0xFFB9A7C9),
+                        fontSize = 13.sp
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "기록 초기화",
+                        color = Color(0xFF9C6ADE),
+                        fontSize = 13.sp,
+                        modifier = Modifier
+                            .clickable { HintProgressManager.clear(room.id) }
+                            .padding(vertical = 4.dp)
+                    )
+                }
             }
         }
     }
@@ -202,4 +232,10 @@ fun timerColor(status: RoomStatus): Color {
         RoomStatus.PAUSED -> Color(0xFFFFB000)
         RoomStatus.WAITING -> Color(0xFFFFB000)
     }
+}
+
+
+private fun formatHintUsedAt(timestamp: Long): String {
+    if (timestamp <= 0L) return "사용 시각 없음"
+    return SimpleDateFormat("HH:mm:ss", Locale.KOREA).format(Date(timestamp))
 }

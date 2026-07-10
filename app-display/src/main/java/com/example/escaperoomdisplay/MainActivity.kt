@@ -28,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -39,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.escaperoomdisplay.network.DisplaySyncManager
+import com.example.escaperoomdisplay.network.HintUsageSender
 import com.example.escaperoomdisplay.ui.theme.EscapeRoomTimerTheme
 import com.example.escaperoomdisplay.util.openHintApp
 import com.example.escaperoomshared.model.SharedRoomState
@@ -257,7 +259,11 @@ private fun GuestDisplayScreen(
 ) {
     val context = LocalContext.current
     val showDebugTools = isDebugBuild(context)
+    val roomId = room?.id
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var hintNumber by remember(roomId) {
+        mutableIntStateOf(loadNextHintNumber(context, roomId))
+    }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -331,10 +337,63 @@ private fun GuestDisplayScreen(
             fontSize = 14.sp
         )
 
-        Spacer(Modifier.height(44.dp))
+        Spacer(Modifier.height(30.dp))
+
+        Text(
+            text = "사용할 힌트 번호",
+            color = Color(0xFFB9A7C9),
+            fontSize = 14.sp
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedButton(
+                onClick = {
+                    hintNumber = (hintNumber - 1).coerceAtLeast(1)
+                    saveNextHintNumber(context, roomId, hintNumber)
+                },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("-")
+            }
+
+            Text(
+                text = "${hintNumber}번",
+                color = Color.White,
+                fontSize = 26.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            OutlinedButton(
+                onClick = {
+                    hintNumber += 1
+                    saveNextHintNumber(context, roomId, hintNumber)
+                },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("+")
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
 
         Button(
-            onClick = { openHintApp(context) },
+            onClick = {
+                val currentRoomId = roomId
+                if (currentRoomId != null) {
+                    HintUsageSender.send(currentRoomId, hintNumber)
+                    val nextHintNumber = hintNumber + 1
+                    saveNextHintNumber(context, currentRoomId, nextHintNumber)
+                    hintNumber = nextHintNumber
+                    openHintApp(context)
+                }
+            },
+            enabled = roomId != null,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(64.dp),
@@ -342,12 +401,20 @@ private fun GuestDisplayScreen(
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5E2B86))
         ) {
             Text(
-                text = "힌트앱 열기",
+                text = "${hintNumber}번 힌트 사용",
                 color = Color.White,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold
             )
         }
+
+        Spacer(Modifier.height(10.dp))
+
+        Text(
+            text = "버튼을 누르면 사용 기록을 직원용 앱에 보내고 힌트앱을 엽니다.",
+            color = Color(0xFF687078),
+            fontSize = 12.sp
+        )
 
         Spacer(Modifier.height(14.dp))
 
@@ -389,4 +456,22 @@ private fun formatTime(totalSeconds: Int): String {
 
 private fun isDebugBuild(context: Context): Boolean {
     return context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+}
+
+
+private const val HINT_PREFS_NAME = "display_hint_preferences"
+
+private fun loadNextHintNumber(context: Context, roomId: String?): Int {
+    if (roomId == null) return 1
+    return context.getSharedPreferences(HINT_PREFS_NAME, Context.MODE_PRIVATE)
+        .getInt("next_hint_$roomId", 1)
+        .coerceAtLeast(1)
+}
+
+private fun saveNextHintNumber(context: Context, roomId: String?, hintNumber: Int) {
+    if (roomId == null) return
+    context.getSharedPreferences(HINT_PREFS_NAME, Context.MODE_PRIVATE)
+        .edit()
+        .putInt("next_hint_$roomId", hintNumber.coerceAtLeast(1))
+        .apply()
 }

@@ -9,6 +9,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.example.escaperoomtimer.manager.HintProgressManager
 import com.example.escaperoomtimer.manager.TimerManager
 import com.example.escaperoomtimer.service.TimerForegroundService
 import com.example.escaperoomtimer.ui.home.HomeScreen
@@ -24,6 +25,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         TimerManager.initialize(applicationContext)
+        HintProgressManager.start(applicationContext)
         requestNotificationPermissionIfNeeded()
         startTimerForegroundService()
 
