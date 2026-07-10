@@ -24,12 +24,14 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -73,12 +75,18 @@ private fun DisplayApp() {
     val selectedRoom by DisplaySyncManager.selectedRoom
     val lastReceivedAt by DisplaySyncManager.lastReceivedAtMillis
     val debugDemoActive by DisplaySyncManager.debugDemoActive
+    val serverHost by DisplaySyncManager.serverHost
+    val tcpConnected by DisplaySyncManager.isConnected
 
     if (selectedRoomId == null) {
         RoomSelectionScreen(
             rooms = rooms,
             lastReceivedAtMillis = lastReceivedAt,
             debugDemoActive = debugDemoActive,
+            serverHost = serverHost,
+            tcpConnected = tcpConnected,
+            onServerHostChanged = { host -> DisplaySyncManager.setServerHost(context, host) },
+            onReconnect = DisplaySyncManager::reconnect,
             onSelectRoom = { roomId -> DisplaySyncManager.selectRoom(context, roomId) },
             onStartDebugDemo = DisplaySyncManager::startDebugDemo,
             onStopDebugDemo = DisplaySyncManager::stopDebugDemo
@@ -102,12 +110,17 @@ private fun RoomSelectionScreen(
     rooms: List<SharedRoomState>,
     lastReceivedAtMillis: Long,
     debugDemoActive: Boolean,
+    serverHost: String,
+    tcpConnected: Boolean,
+    onServerHostChanged: (String) -> Unit,
+    onReconnect: () -> Unit,
     onSelectRoom: (String) -> Unit,
     onStartDebugDemo: () -> Unit,
     onStopDebugDemo: () -> Unit
 ) {
     val context = LocalContext.current
     val showDebugTools = isDebugBuild(context)
+    var hostInput by remember(serverHost) { mutableStateOf(serverHost) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -137,18 +150,57 @@ private fun RoomSelectionScreen(
         Text(
             text = when {
                 debugDemoActive -> "디버그 테스트 모드"
-                isConnected -> "직원용 앱 연결됨"
+                tcpConnected && isConnected -> "직원용 앱 연결됨"
                 else -> "직원용 앱을 기다리는 중"
             },
             color = when {
                 debugDemoActive -> Color(0xFF9C6ADE)
-                isConnected -> Color(0xFF44D17A)
+                tcpConnected && isConnected -> Color(0xFF44D17A)
                 else -> Color(0xFFFFB000)
             },
             fontSize = 15.sp
         )
 
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(20.dp))
+
+        OutlinedTextField(
+            value = hostInput,
+            onValueChange = { hostInput = it },
+            label = { Text("직원용 기기 IP 주소") },
+            placeholder = { Text("예: 192.168.0.15") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(Modifier.height(10.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Button(
+                onClick = { onServerHostChanged(hostInput) },
+                modifier = Modifier.weight(1f),
+                enabled = hostInput.trim().isNotEmpty()
+            ) {
+                Text("연결")
+            }
+            OutlinedButton(
+                onClick = onReconnect,
+                modifier = Modifier.weight(1f),
+                enabled = serverHost.isNotBlank()
+            ) {
+                Text("다시 연결")
+            }
+        }
+
+        Text(
+            text = if (serverHost.isBlank()) "직원용 앱의 IP 주소를 입력해 주세요." else "저장된 주소: $serverHost",
+            color = Color(0xFF687078),
+            fontSize = 12.sp
+        )
+
+        Spacer(Modifier.height(20.dp))
 
         if (rooms.isEmpty()) {
             Text(

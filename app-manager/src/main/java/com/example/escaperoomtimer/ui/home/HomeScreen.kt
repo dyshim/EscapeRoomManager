@@ -32,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.escaperoomtimer.model.RoomInfo
+import com.example.escaperoomtimer.util.localIpv4Address
 import com.example.escaperoomtimer.util.nowText
 import kotlinx.coroutines.delay
 
@@ -43,6 +44,7 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     var currentTime by remember { mutableStateOf(nowText()) }
+    val localIp = remember { localIpv4Address() }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -87,6 +89,12 @@ fun HomeScreen(
             color = Color.White,
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+        )
+        Text(
+            text = "손님용 연결 주소  $localIp:45991",
+            color = Color(0xFF44D17A),
+            fontSize = 12.sp,
             modifier = Modifier.align(Alignment.CenterHorizontally)
         )
 

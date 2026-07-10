@@ -1,0 +1,8 @@
+Commit016 적용 후 아래 기존 UDP 파일을 삭제하세요.
+
+app-manager/src/main/java/com/example/escaperoomtimer/network/RoomStateBroadcaster.kt
+shared/src/main/java/com/example/escaperoomshared/network/SyncProtocol.kt
+shared/src/main/java/com/example/escaperoomshared/network/HintProtocol.kt
+
+삭제하지 않아도 새 TCP 코드의 컴파일에는 직접 영향이 없을 수 있지만,
+중복 통신 구조를 남기지 않기 위해 삭제를 권장합니다.

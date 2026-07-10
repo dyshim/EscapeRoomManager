@@ -1,24 +1,19 @@
 package com.example.escaperoomdisplay.network
 
 import android.content.Context
-import android.net.wifi.WifiManager
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
+import com.example.escaperoomshared.model.HintUsageEvent
 import com.example.escaperoomshared.model.SharedRoomState
-import com.example.escaperoomshared.network.SyncProtocol
-import java.net.DatagramPacket
-import java.net.DatagramSocket
-import java.net.SocketException
-import java.util.concurrent.atomic.AtomicBoolean
 
 object DisplaySyncManager {
     private const val PREFS_NAME = "display_sync_preferences"
     private const val KEY_SELECTED_ROOM_ID = "selected_room_id"
+    private const val KEY_SERVER_HOST = "server_host"
 
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val listening = AtomicBoolean(false)
     private val roomsById = linkedMapOf<String, SharedRoomState>()
 
     private val _rooms = mutableStateOf<List<SharedRoomState>>(emptyList())
@@ -36,41 +31,68 @@ object DisplaySyncManager {
     private val _debugDemoActive = mutableStateOf(false)
     val debugDemoActive: State<Boolean> = _debugDemoActive
 
-    private var socket: DatagramSocket? = null
-    private var multicastLock: WifiManager.MulticastLock? = null
-    private var listenerThread: Thread? = null
+    private val _serverHost = mutableStateOf("")
+    val serverHost: State<String> = _serverHost
+
+    private val _isConnected = mutableStateOf(false)
+    val isConnected: State<Boolean> = _isConnected
+
+    private var appContext: Context? = null
     private var debugTickRunnable: Runnable? = null
+
+    private val tcpClient = DisplayTcpClient(
+        onRoomReceived = ::updateRoom,
+        onConnectionChanged = { connected ->
+            mainHandler.post {
+                _isConnected.value = connected
+                if (connected && _debugDemoActive.value) stopDebugDemo()
+            }
+        }
+    )
 
     @Synchronized
     fun start(context: Context) {
-        if (!listening.compareAndSet(false, true)) return
+        val contextApp = context.applicationContext
+        if (appContext != null) return
+        appContext = contextApp
 
-        val appContext = context.applicationContext
-        _selectedRoomId.value = appContext
-            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getString(KEY_SELECTED_ROOM_ID, null)
-
-        val wifiManager = appContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
-        multicastLock = wifiManager?.createMulticastLock("escape-room-display-sync")?.apply {
-            setReferenceCounted(false)
-            acquire()
-        }
-
-        listenerThread = Thread({ listenLoop() }, "display-sync-listener").apply {
-            isDaemon = true
-            start()
-        }
+        val prefs = contextApp.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        _selectedRoomId.value = prefs.getString(KEY_SELECTED_ROOM_ID, null)
+        val savedHost = prefs.getString(KEY_SERVER_HOST, "")?.trim().orEmpty()
+        _serverHost.value = savedHost
+        if (savedHost.isNotBlank()) tcpClient.connect(savedHost)
     }
 
     @Synchronized
     fun stop() {
         stopDebugDemo()
-        listening.set(false)
-        socket?.close()
-        socket = null
-        listenerThread = null
-        multicastLock?.let { lock -> if (lock.isHeld) lock.release() }
-        multicastLock = null
+        tcpClient.disconnect()
+        appContext = null
+    }
+
+    fun setServerHost(context: Context, host: String) {
+        val normalized = host.trim()
+        context.applicationContext
+            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_SERVER_HOST, normalized)
+            .apply()
+
+        mainHandler.post {
+            _serverHost.value = normalized
+            _isConnected.value = false
+            roomsById.clear()
+            _rooms.value = emptyList()
+            _selectedRoom.value = null
+            _lastReceivedAtMillis.value = 0L
+        }
+
+        if (normalized.isBlank()) tcpClient.disconnect() else tcpClient.connect(normalized)
+    }
+
+    fun reconnect() {
+        val host = _serverHost.value
+        if (host.isNotBlank()) tcpClient.connect(host)
     }
 
     fun selectRoom(context: Context, roomId: String) {
@@ -99,68 +121,47 @@ object DisplaySyncManager {
         }
     }
 
-    /** Debug 빌드 전용 UI 테스트용 가짜 서버입니다. */
+    fun sendHintUsage(roomId: String, hintNumber: Int): Boolean {
+        return tcpClient.sendHint(
+            HintUsageEvent(
+                roomId = roomId,
+                hintNumber = hintNumber.coerceAtLeast(1),
+                usedAtMillis = System.currentTimeMillis()
+            )
+        )
+    }
+
     fun startDebugDemo() {
         stopDebugDemo()
-
         val now = System.currentTimeMillis()
         roomsById.clear()
-        roomsById["room-1"] = SharedRoomState(
-            id = "room-1",
-            name = "미녀와 야수",
-            seconds = 60 * 60,
-            status = "RUNNING",
-            isRunning = true,
-            updatedAtMillis = now
-        )
-        roomsById["room-2"] = SharedRoomState(
-            id = "room-2",
-            name = "Fancy",
-            seconds = 4 * 60 + 58,
-            status = "WARNING",
-            isRunning = true,
-            updatedAtMillis = now
-        )
-        roomsById["room-3"] = SharedRoomState(
-            id = "room-3",
-            name = "도둑들",
-            seconds = 70 * 60,
-            status = "WAITING",
-            isRunning = false,
-            updatedAtMillis = now
-        )
-
+        roomsById["room-1"] = SharedRoomState("room-1", "미녀와 야수", 3600, "RUNNING", true, now)
+        roomsById["room-2"] = SharedRoomState("room-2", "Fancy", 298, "WARNING", true, now)
+        roomsById["room-3"] = SharedRoomState("room-3", "도둑들", 4200, "WAITING", false, now)
         _debugDemoActive.value = true
         publishCurrentRooms(now)
 
         val runnable = object : Runnable {
             override fun run() {
                 if (!_debugDemoActive.value) return
-
                 val tickAt = System.currentTimeMillis()
                 val updated = roomsById.mapValues { (_, room) ->
                     if (room.isRunning && room.seconds > 0) {
-                        val nextSeconds = room.seconds - 1
+                        val next = room.seconds - 1
                         room.copy(
-                            seconds = nextSeconds,
-                            status = if (nextSeconds <= 0) "FINISHED"
-                            else if (nextSeconds <= 5 * 60) "WARNING"
-                            else "RUNNING",
-                            isRunning = nextSeconds > 0,
+                            seconds = next,
+                            status = if (next <= 0) "FINISHED" else if (next <= 300) "WARNING" else "RUNNING",
+                            isRunning = next > 0,
                             updatedAtMillis = tickAt
                         )
-                    } else {
-                        room.copy(updatedAtMillis = tickAt)
-                    }
+                    } else room.copy(updatedAtMillis = tickAt)
                 }
-
                 roomsById.clear()
                 roomsById.putAll(updated)
                 publishCurrentRooms(tickAt)
                 mainHandler.postDelayed(this, 1_000L)
             }
         }
-
         debugTickRunnable = runnable
         mainHandler.postDelayed(runnable, 1_000L)
     }
@@ -177,45 +178,18 @@ object DisplaySyncManager {
         }
     }
 
-    private fun listenLoop() {
-        try {
-            DatagramSocket(SyncProtocol.PORT).use { datagramSocket ->
-                socket = datagramSocket
-                datagramSocket.reuseAddress = true
-                datagramSocket.broadcast = true
-
-                val buffer = ByteArray(4096)
-                while (listening.get()) {
-                    val packet = DatagramPacket(buffer, buffer.size)
-                    datagramSocket.receive(packet)
-                    val room = SyncProtocol.decodeRoom(packet.data, packet.length) ?: continue
-                    updateRoom(room)
-                }
-            }
-        } catch (_: SocketException) {
-            // Socket is intentionally closed when the app stops.
-        } catch (_: Exception) {
-            // Keep the display app alive if the local network is temporarily unavailable.
-        } finally {
-            socket = null
-            listening.set(false)
-        }
-    }
-
     @Synchronized
     private fun updateRoom(room: SharedRoomState) {
         if (_debugDemoActive.value) return
-
         roomsById[room.id] = room
         publishCurrentRooms(System.currentTimeMillis())
     }
 
     private fun publishCurrentRooms(receivedAt: Long) {
-        val roomList = roomsById.values.sortedBy { it.id }
+        val list = roomsById.values.sortedBy { it.id }
         val selected = _selectedRoomId.value?.let(roomsById::get)
-
         mainHandler.post {
-            _rooms.value = roomList
+            _rooms.value = list
             _selectedRoom.value = selected
             _lastReceivedAtMillis.value = receivedAt
         }

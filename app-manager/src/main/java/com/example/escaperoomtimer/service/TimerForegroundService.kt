@@ -9,7 +9,7 @@ import androidx.core.app.NotificationManagerCompat
 import com.example.escaperoomtimer.manager.HintProgressManager
 import com.example.escaperoomtimer.manager.TimerManager
 import com.example.escaperoomtimer.notification.TimerNotificationHelper
-import com.example.escaperoomtimer.network.RoomStateBroadcaster
+import com.example.escaperoomtimer.network.ManagerTcpServer
 import com.example.escaperoomtimer.widget.RoomStatusWidgetProvider
 
 class TimerForegroundService : Service() {
@@ -27,6 +27,7 @@ class TimerForegroundService : Service() {
         super.onCreate()
         TimerManager.initialize(applicationContext)
         HintProgressManager.start(applicationContext)
+        ManagerTcpServer.start()
         TimerNotificationHelper.createChannel(this)
         startForeground(
             TimerNotificationHelper.NOTIFICATION_ID,
@@ -42,6 +43,7 @@ class TimerForegroundService : Service() {
 
     override fun onDestroy() {
         TimerManager.persistNow()
+        ManagerTcpServer.stop()
         HintProgressManager.stop()
         handler.removeCallbacks(ticker)
         super.onDestroy()
@@ -55,6 +57,6 @@ class TimerForegroundService : Service() {
             TimerNotificationHelper.buildTimerNotification(this)
         )
         RoomStatusWidgetProvider.updateAll(this)
-        RoomStateBroadcaster.broadcast(TimerManager.rooms)
+        ManagerTcpServer.broadcastRooms(TimerManager.rooms)
     }
 }
