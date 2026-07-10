@@ -75,6 +75,47 @@ object TimerManager {
         }
     }
 
+
+    fun adjustSeconds(roomId: String, deltaSeconds: Int) {
+        updateRoom(roomId) { room ->
+            val nextSeconds = (room.seconds + deltaSeconds).coerceAtLeast(0)
+            val nextRunning = room.isRunning && nextSeconds > 0
+            room.copy(
+                seconds = nextSeconds,
+                isRunning = nextRunning,
+                status = manualStatus(room, nextSeconds, nextRunning)
+            )
+        }
+    }
+
+    fun setTime(roomId: String, totalSeconds: Int) {
+        updateRoom(roomId) { room ->
+            val nextSeconds = totalSeconds.coerceAtLeast(0)
+            val nextRunning = room.isRunning && nextSeconds > 0
+            room.copy(
+                seconds = nextSeconds,
+                isRunning = nextRunning,
+                status = manualStatus(room, nextSeconds, nextRunning)
+            )
+        }
+    }
+
+    fun restoreTimeState(
+        roomId: String,
+        seconds: Int,
+        isRunning: Boolean,
+        status: RoomStatus
+    ) {
+        updateRoom(roomId) { room ->
+            val safeSeconds = seconds.coerceAtLeast(0)
+            room.copy(
+                seconds = safeSeconds,
+                isRunning = isRunning && safeSeconds > 0,
+                status = if (safeSeconds <= 0) RoomStatus.FINISHED else status
+            )
+        }
+    }
+
     fun addFiveMinutes(roomId: String) {
         updateRoom(roomId) { room ->
             val nextSeconds = room.seconds + 5 * 60
@@ -157,6 +198,16 @@ object TimerManager {
         if (index >= 0) {
             rooms[index] = block(rooms[index])
             persistNow()
+        }
+    }
+
+
+    private fun manualStatus(room: RoomInfo, seconds: Int, isRunning: Boolean): RoomStatus {
+        return when {
+            seconds <= 0 -> RoomStatus.FINISHED
+            isRunning -> runningStatusFromSeconds(seconds)
+            room.status == RoomStatus.WAITING -> RoomStatus.WAITING
+            else -> RoomStatus.PAUSED
         }
     }
 

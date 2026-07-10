@@ -11,21 +11,33 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.escaperoomtimer.manager.HintProgressManager
 import com.example.escaperoomtimer.manager.TimerManager
 import com.example.escaperoomtimer.model.RoomStatus
 import com.example.escaperoomtimer.util.formatTime
+import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -36,13 +48,35 @@ fun TimerScreen(
     onBack: () -> Unit
 ) {
     val room = TimerManager.getRoom(roomId) ?: return
-    val hintProgress = HintProgressManager.progressByRoom[roomId]
+
+    var minuteInput by remember(room.id) { mutableStateOf((room.seconds / 60).toString()) }
+    var secondInput by remember(room.id) { mutableStateOf((room.seconds % 60).toString()) }
+    var undoSnapshot by remember(room.id) { mutableStateOf<UndoSnapshot?>(null) }
+    var undoVersion by remember(room.id) { mutableIntStateOf(0) }
+
+    LaunchedEffect(undoVersion) {
+        if (undoVersion > 0) {
+            delay(5_000L)
+            undoSnapshot = null
+        }
+    }
+
+    fun rememberBeforeChange() {
+        undoSnapshot = UndoSnapshot(room.seconds, room.isRunning, room.status)
+        undoVersion += 1
+    }
+
+    fun adjustTime(deltaSeconds: Int) {
+        rememberBeforeChange()
+        TimerManager.adjustSeconds(room.id, deltaSeconds)
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF0B0F12))
-            .padding(18.dp),
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 18.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Row(
@@ -60,33 +94,61 @@ fun TimerScreen(
             Text("직원", color = Color(0xFFFFB000), fontSize = 15.sp, fontWeight = FontWeight.Bold)
         }
 
-        Spacer(Modifier.height(34.dp))
-
+        Spacer(Modifier.height(24.dp))
         StatusBadge(room.status, room.isRunning)
-
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(14.dp))
 
         Text(
-            text = formatTime(room.seconds),
-            color = timerColor(room.status),
-            fontSize = 76.sp,
+            text = "남은 시간",
+            color = Color(0xFFB7BCC4),
+            fontSize = 15.sp,
             fontWeight = FontWeight.Bold
         )
-
+        Spacer(Modifier.height(4.dp))
         Text(
-            text = when (room.status) {
-                RoomStatus.WAITING -> "대기중"
-                RoomStatus.RUNNING -> "진행중"
-                RoomStatus.WARNING -> "종료 임박"
-                RoomStatus.PAUSED -> "일시정지"
-                RoomStatus.FINISHED -> "종료"
-            },
+            text = formatTime(room.seconds),
+            color = timerColor(room.seconds, room.status),
+            fontSize = 70.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = statusLabel(room.status),
             color = Color.White,
             fontSize = 17.sp,
             fontWeight = FontWeight.Bold
         )
 
-        Spacer(Modifier.height(30.dp))
+        Spacer(Modifier.height(18.dp))
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFF171C20), RoundedCornerShape(14.dp))
+                .padding(vertical = 14.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "종료 예정",
+                    color = Color(0xFFB7BCC4),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = expectedEndTimeText(
+                        seconds = room.seconds,
+                        status = room.status,
+                        isRunning = room.isRunning
+                    ),
+                    color = Color.White,
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        Spacer(Modifier.height(24.dp))
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             TimerButton(
@@ -99,83 +161,203 @@ fun TimerScreen(
                 text = "■ 종료",
                 color = Color(0xFF9B211B),
                 modifier = Modifier.weight(1f),
-                onClick = { TimerManager.stop(room.id) }
+                onClick = {
+                    rememberBeforeChange()
+                    TimerManager.stop(room.id)
+                }
             )
         }
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(18.dp))
+        SectionTitle("시간 추가")
+        Spacer(Modifier.height(8.dp))
 
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            TimerButton(
-                text = "+5분",
-                color = Color(0xFFC96D00),
+        TimeAdjustRow(
+            leftText = "+10분",
+            rightText = "+5분",
+            leftClick = { adjustTime(10 * 60) },
+            rightClick = { adjustTime(5 * 60) }
+        )
+        Spacer(Modifier.height(8.dp))
+        TimeAdjustRow(
+            leftText = "+1분",
+            rightText = "+30초",
+            leftClick = { adjustTime(60) },
+            rightClick = { adjustTime(30) }
+        )
+        Spacer(Modifier.height(8.dp))
+        TimerButton(
+            text = "+10초",
+            color = Color(0xFF8B4A00),
+            modifier = Modifier.fillMaxWidth(),
+            onClick = { adjustTime(10) }
+        )
+
+        Spacer(Modifier.height(18.dp))
+        SectionTitle("시간 차감")
+        Spacer(Modifier.height(8.dp))
+
+        TimeAdjustRow(
+            leftText = "-10분",
+            rightText = "-5분",
+            leftClick = { adjustTime(-10 * 60) },
+            rightClick = { adjustTime(-5 * 60) }
+        )
+        Spacer(Modifier.height(8.dp))
+        TimeAdjustRow(
+            leftText = "-1분",
+            rightText = "-30초",
+            leftClick = { adjustTime(-60) },
+            rightClick = { adjustTime(-30) }
+        )
+        Spacer(Modifier.height(8.dp))
+        TimerButton(
+            text = "-10초",
+            color = Color(0xFF242A2F),
+            modifier = Modifier.fillMaxWidth(),
+            onClick = { adjustTime(-10) }
+        )
+
+        Spacer(Modifier.height(18.dp))
+        SectionTitle("직접 입력")
+        Spacer(Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = minuteInput,
+                onValueChange = { value ->
+                    minuteInput = value.filter(Char::isDigit).take(3)
+                },
                 modifier = Modifier.weight(1f),
-                onClick = { TimerManager.addFiveMinutes(room.id) }
+                label = { Text("분") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
             )
-            TimerButton(
-                text = "-5분",
-                color = Color(0xFF242A2F),
+            OutlinedTextField(
+                value = secondInput,
+                onValueChange = { value ->
+                    secondInput = value.filter(Char::isDigit).take(2)
+                },
                 modifier = Modifier.weight(1f),
-                onClick = { TimerManager.minusFiveMinutes(room.id) }
+                label = { Text("초") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
             )
         }
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(10.dp))
+        TimerButton(
+            text = "입력한 시간 적용",
+            color = Color(0xFF4E2D78),
+            modifier = Modifier.fillMaxWidth(),
+            onClick = {
+                val minutes = minuteInput.toIntOrNull()?.coerceIn(0, 999) ?: 0
+                val seconds = secondInput.toIntOrNull()?.coerceIn(0, 59) ?: 0
+                rememberBeforeChange()
+                TimerManager.setTime(room.id, minutes * 60 + seconds)
+                minuteInput = minutes.toString()
+                secondInput = seconds.toString()
+            }
+        )
 
+        Spacer(Modifier.height(10.dp))
         TimerButton(
             text = "↺ 기본시간 초기화",
             color = Color(0xFF242A2F),
             modifier = Modifier.fillMaxWidth(),
-            onClick = { TimerManager.reset(room.id) }
+            onClick = {
+                TimerManager.reset(room.id)
+                minuteInput = room.defaultMinutes.toString()
+                secondInput = "0"
+            }
         )
 
-        Spacer(Modifier.height(12.dp))
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Color(0xFF231B2D), RoundedCornerShape(12.dp))
-                .padding(horizontal = 18.dp, vertical = 16.dp)
-        ) {
-            Column {
-                Text(
-                    text = "힌트 사용 기록",
-                    color = Color.White,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(Modifier.height(6.dp))
-
-                if (hintProgress == null || hintProgress.useCount == 0) {
-                    Text(
-                        text = "아직 사용한 힌트가 없습니다.",
-                        color = Color(0xFFB9A7C9),
-                        fontSize = 14.sp
+        undoSnapshot?.let { snapshot ->
+            Spacer(Modifier.height(12.dp))
+            UndoBar(
+                previousSeconds = snapshot.seconds,
+                onUndo = {
+                    TimerManager.restoreTimeState(
+                        roomId = room.id,
+                        seconds = snapshot.seconds,
+                        isRunning = snapshot.isRunning,
+                        status = snapshot.status
                     )
-                } else {
-                    Text(
-                        text = "최근 사용: ${hintProgress.lastHintNumber}번 힌트",
-                        color = Color(0xFFD7C8E5),
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(Modifier.height(3.dp))
-                    Text(
-                        text = "총 ${hintProgress.useCount}회 · ${formatHintUsedAt(hintProgress.lastUsedAtMillis)}",
-                        color = Color(0xFFB9A7C9),
-                        fontSize = 13.sp
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = "기록 초기화",
-                        color = Color(0xFF9C6ADE),
-                        fontSize = 13.sp,
-                        modifier = Modifier
-                            .clickable { HintProgressManager.clear(room.id) }
-                            .padding(vertical = 4.dp)
-                    )
+                    minuteInput = (snapshot.seconds / 60).toString()
+                    secondInput = (snapshot.seconds % 60).toString()
+                    undoSnapshot = null
                 }
-            }
+            )
+        }
+
+        Spacer(Modifier.height(28.dp))
+    }
+}
+
+private data class UndoSnapshot(
+    val seconds: Int,
+    val isRunning: Boolean,
+    val status: RoomStatus
+)
+
+@Composable
+private fun SectionTitle(text: String) {
+    Text(
+        text = text,
+        modifier = Modifier.fillMaxWidth(),
+        color = Color(0xFFD6D6D6),
+        fontSize = 15.sp,
+        fontWeight = FontWeight.Bold
+    )
+}
+
+@Composable
+private fun TimeAdjustRow(
+    leftText: String,
+    rightText: String,
+    leftClick: () -> Unit,
+    rightClick: () -> Unit
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        TimerButton(
+            text = leftText,
+            color = Color(0xFF8B4A00),
+            modifier = Modifier.weight(1f),
+            onClick = leftClick
+        )
+        TimerButton(
+            text = rightText,
+            color = Color(0xFF8B4A00),
+            modifier = Modifier.weight(1f),
+            onClick = rightClick
+        )
+    }
+}
+
+@Composable
+private fun UndoBar(
+    previousSeconds: Int,
+    onUndo: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF1D2530), RoundedCornerShape(12.dp))
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "이전 시간 ${formatTime(previousSeconds)}",
+            color = Color.White,
+            fontSize = 14.sp
+        )
+        TextButton(onClick = onUndo) {
+            Text("실행 취소", color = Color(0xFFFFB000), fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -216,26 +398,45 @@ fun TimerButton(
 ) {
     Button(
         onClick = onClick,
-        modifier = modifier.height(58.dp),
+        modifier = modifier.height(56.dp),
         shape = RoundedCornerShape(12.dp),
         colors = ButtonDefaults.buttonColors(containerColor = color)
     ) {
-        Text(text, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+        Text(text, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
     }
 }
 
-fun timerColor(status: RoomStatus): Color {
+private fun statusLabel(status: RoomStatus): String {
     return when (status) {
-        RoomStatus.WARNING -> Color(0xFFFF4B4B)
-        RoomStatus.FINISHED -> Color(0xFFFF4B4B)
-        RoomStatus.RUNNING -> Color(0xFF42E66F)
-        RoomStatus.PAUSED -> Color(0xFFFFB000)
-        RoomStatus.WAITING -> Color(0xFFFFB000)
+        RoomStatus.WAITING -> "대기중"
+        RoomStatus.RUNNING -> "진행중"
+        RoomStatus.WARNING -> "종료 임박"
+        RoomStatus.PAUSED -> "일시정지"
+        RoomStatus.FINISHED -> "종료"
     }
 }
 
+private fun expectedEndTimeText(
+    seconds: Int,
+    status: RoomStatus,
+    isRunning: Boolean
+): String {
+    return when {
+        status == RoomStatus.FINISHED || seconds <= 0 -> "종료됨"
+        status == RoomStatus.WAITING -> "시작 후 표시"
+        !isRunning -> "일시정지 중"
+        else -> {
+            val endAtMillis = System.currentTimeMillis() + seconds * 1_000L
+            SimpleDateFormat("a h:mm", Locale.KOREA).format(Date(endAtMillis))
+        }
+    }
+}
 
-private fun formatHintUsedAt(timestamp: Long): String {
-    if (timestamp <= 0L) return "사용 시각 없음"
-    return SimpleDateFormat("HH:mm:ss", Locale.KOREA).format(Date(timestamp))
+fun timerColor(seconds: Int, status: RoomStatus): Color {
+    return when {
+        status == RoomStatus.FINISHED || seconds <= 0 -> Color(0xFFFF4B4B)
+        seconds <= 5 * 60 -> Color(0xFFFF4B4B)
+        seconds <= 10 * 60 -> Color(0xFFFFA726)
+        else -> Color(0xFF42E66F)
+    }
 }
