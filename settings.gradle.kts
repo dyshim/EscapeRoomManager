@@ -22,5 +22,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "EscapeRoomTimer"
-include(":app")
+rootProject.name = "EscapeRoomSuite"
+include(":app-manager")
+include(":app-display")
