@@ -141,14 +141,14 @@ private fun RoomSelectionScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF080B0E))
+            .background(Color.Black)
             .padding(horizontal = 24.dp, vertical = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             text = "손님용 태블릿 설정",
             color = Color.White,
-            fontSize = 28.sp,
+            fontSize = 30.sp,
             fontWeight = FontWeight.Bold
         )
 
@@ -165,7 +165,7 @@ private fun RoomSelectionScreen(
                 tcpConnected && isConnected -> Color(0xFF44D17A)
                 else -> Color(0xFFFFB000)
             },
-            fontSize = 15.sp
+            fontSize = 17.sp
         )
 
         Spacer(Modifier.height(20.dp))
@@ -203,8 +203,8 @@ private fun RoomSelectionScreen(
 
         Text(
             text = if (serverHost.isBlank()) "직원용 앱의 IP 주소를 입력해 주세요." else "저장된 주소: $serverHost",
-            color = Color(0xFF687078),
-            fontSize = 12.sp
+            color = Color(0xFFB7AEC2),
+            fontSize = 14.sp
         )
 
         Spacer(Modifier.height(20.dp))
@@ -212,15 +212,15 @@ private fun RoomSelectionScreen(
         if (rooms.isEmpty()) {
             Text(
                 text = "두 기기를 같은 Wi-Fi에 연결하고\n직원용 앱을 실행해 주세요.",
-                color = Color(0xFF9AA4AD),
-                fontSize = 17.sp,
+                color = Color(0xFFD0C8D9),
+                fontSize = 19.sp,
                 lineHeight = 25.sp
             )
         } else {
             Text(
                 text = "이 태블릿에서 사용할 방을 선택하세요.",
-                color = Color(0xFF9AA4AD),
-                fontSize = 15.sp
+                color = Color(0xFFD0C8D9),
+                fontSize = 17.sp
             )
 
             Spacer(Modifier.height(18.dp))
@@ -246,7 +246,7 @@ private fun RoomSelectionScreen(
                     onClick = onStartDebugDemo,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(54.dp),
+                        .height(62.dp),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5E2B86))
                 ) {
@@ -261,8 +261,8 @@ private fun RoomSelectionScreen(
             Spacer(Modifier.height(8.dp))
             Text(
                 text = "이 버튼은 Debug 빌드에서만 표시됩니다.",
-                color = Color(0xFF687078),
-                fontSize = 12.sp
+                color = Color(0xFFB7AEC2),
+                fontSize = 14.sp
             )
         }
     }
@@ -275,7 +275,7 @@ private fun RoomSelectionCard(room: SharedRoomState, onClick: () -> Unit) {
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF171C20))
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF191621))
     ) {
         Row(
             modifier = Modifier
@@ -288,13 +288,13 @@ private fun RoomSelectionCard(room: SharedRoomState, onClick: () -> Unit) {
                 Text(
                     text = room.name,
                     color = Color.White,
-                    fontSize = 20.sp,
+                    fontSize = 22.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
                     text = statusLabel(room),
-                    color = Color(0xFF9AA4AD),
-                    fontSize = 13.sp
+                    color = Color(0xFFD0C8D9),
+                    fontSize = 15.sp
                 )
             }
 
@@ -351,7 +351,7 @@ private fun GuestDisplayScreen(
     val showStartButton = room != null && !room.isRunning && !isGameFinished
     val timeText = room?.seconds?.let(::formatTime) ?: "--:--"
     val timeColor = when {
-        !isConnected -> Color(0xFF9AA4AD)
+        !isConnected -> Color(0xFFD0C8D9)
         (room?.seconds ?: Int.MAX_VALUE) <= 5 * 60 -> Color(0xFFFF4B4B)
         else -> Color.White
     }
@@ -359,7 +359,7 @@ private fun GuestDisplayScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF080B0E))
+            .background(Color.Black)
             .padding(horizontal = 24.dp, vertical = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
@@ -375,7 +375,7 @@ private fun GuestDisplayScreen(
                 isConnected -> Color(0xFF44D17A)
                 else -> Color(0xFFFF4B4B)
             },
-            fontSize = 16.sp,
+            fontSize = 18.sp,
             fontWeight = FontWeight.Bold
         )
 
@@ -384,7 +384,7 @@ private fun GuestDisplayScreen(
         Text(
             text = roomName,
             color = Color.White,
-            fontSize = 30.sp,
+            fontSize = 34.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.clickable {
                 val tappedAt = System.currentTimeMillis()
@@ -414,14 +414,14 @@ private fun GuestDisplayScreen(
                 enabled = isConnected && !startRequestPending,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(76.dp),
+                    .height(84.dp),
                 shape = RoundedCornerShape(18.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6F3CC3))
             ) {
                 Text(
                     text = if (startRequestPending) "시작 요청 중..." else "START",
                     color = Color.White,
-                    fontSize = 28.sp,
+                    fontSize = 30.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -434,14 +434,14 @@ private fun GuestDisplayScreen(
                 } else {
                     "직원용 앱과 연결되면 START를 누를 수 있습니다."
                 },
-                color = Color(0xFF9AA4AD),
-                fontSize = 13.sp
+                color = Color(0xFFD0C8D9),
+                fontSize = 15.sp
             )
         } else {
             Text(
                 text = timeText,
                 color = timeColor,
-                fontSize = 82.sp,
+                fontSize = 88.sp,
                 fontWeight = FontWeight.Bold
             )
 
@@ -453,7 +453,7 @@ private fun GuestDisplayScreen(
                     room.isRunning -> "게임 진행 중"
                     else -> statusLabel(room)
                 },
-                color = if (isGameFinished) Color(0xFFFF4B4B) else Color(0xFF9AA4AD),
+                color = if (isGameFinished) Color(0xFFFF4B4B) else Color(0xFFD0C8D9),
                 fontSize = if (isGameFinished) 22.sp else 14.sp,
                 fontWeight = if (isGameFinished) FontWeight.Bold else FontWeight.Normal
             )
@@ -482,7 +482,7 @@ private fun GuestDisplayScreen(
             Text(
                 text = "힌트 앱 열기",
                 color = Color.White,
-                fontSize = 20.sp,
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Bold
             )
         }
@@ -493,7 +493,7 @@ private fun GuestDisplayScreen(
             Text(
                 text = "테스트 종료",
                 color = Color(0xFF9C6ADE),
-                fontSize = 13.sp,
+                fontSize = 15.sp,
                 modifier = Modifier
                     .clickable(onClick = onStopDebugDemo)
                     .padding(10.dp)
@@ -573,7 +573,7 @@ private fun AdminPinDialog(
                 )
                 errorText?.let {
                     Spacer(Modifier.height(6.dp))
-                    Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                    Text(it, color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
                 }
             }
         },
@@ -678,7 +678,7 @@ private fun ChangeAdminPinDialog(
                 )
                 errorText?.let {
                     Spacer(Modifier.height(6.dp))
-                    Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                    Text(it, color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
                 }
             }
         },

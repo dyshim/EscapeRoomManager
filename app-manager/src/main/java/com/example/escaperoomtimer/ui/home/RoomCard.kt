@@ -67,41 +67,41 @@ fun RoomCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(78.dp)
+            .height(92.dp)
             .clickable { onClick() },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF171C20)
+            containerColor = Color(0xFF151B20)
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 14.dp),
+                .padding(horizontal = 18.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .size(8.dp)
+                        .size(10.dp)
                         .background(timeColor, CircleShape)
                 )
 
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(12.dp))
 
                 Column {
                     Text(
                         text = room.name,
                         color = Color.White,
-                        fontSize = 14.sp,
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
                         text = timeText,
                         color = timeColor,
-                        fontSize = 28.sp,
+                        fontSize = 34.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -116,7 +116,7 @@ fun RoomCard(
                     Text(
                         text = badgeText,
                         color = Color.White,
-                        fontSize = 12.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -126,7 +126,7 @@ fun RoomCard(
                 Text(
                     text = "›",
                     color = Color.White,
-                    fontSize = 28.sp,
+                    fontSize = 32.sp,
                     fontWeight = FontWeight.Bold
                 )
             }

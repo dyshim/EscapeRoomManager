@@ -76,9 +76,9 @@ fun TimerScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0B0F12))
+            .background(Color.Black)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 18.dp, vertical = 16.dp),
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Row(
@@ -89,11 +89,11 @@ fun TimerScreen(
             Text(
                 text = "←",
                 color = Color.White,
-                fontSize = 28.sp,
+                fontSize = 32.sp,
                 modifier = Modifier.clickable { onBack() }
             )
-            Text(room.name, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-            Text("직원", color = Color(0xFFFFB000), fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text(room.name, color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+            Text("직원", color = Color(0xFFFFB000), fontSize = 17.sp, fontWeight = FontWeight.Bold)
         }
 
         Spacer(Modifier.height(24.dp))
@@ -102,21 +102,21 @@ fun TimerScreen(
 
         Text(
             text = "남은 시간",
-            color = Color(0xFFB7BCC4),
-            fontSize = 15.sp,
+            color = Color(0xFFD7DEE4),
+            fontSize = 18.sp,
             fontWeight = FontWeight.Bold
         )
         Spacer(Modifier.height(4.dp))
         Text(
             text = formatTime(room.seconds),
             color = timerColor(room.seconds, room.status),
-            fontSize = 70.sp,
+            fontSize = 78.sp,
             fontWeight = FontWeight.Bold
         )
         Text(
             text = statusLabel(room.status),
             color = Color.White,
-            fontSize = 17.sp,
+            fontSize = 19.sp,
             fontWeight = FontWeight.Bold
         )
 
@@ -142,8 +142,8 @@ fun TimerScreen(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     text = "종료 예정",
-                    color = Color(0xFFB7BCC4),
-                    fontSize = 14.sp,
+                    color = Color(0xFFD7DEE4),
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(Modifier.height(4.dp))
@@ -154,7 +154,7 @@ fun TimerScreen(
                         isRunning = room.isRunning
                     ),
                     color = Color.White,
-                    fontSize = 26.sp,
+                    fontSize = 30.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -322,7 +322,7 @@ private fun SectionTitle(text: String) {
         text = text,
         modifier = Modifier.fillMaxWidth(),
         color = Color(0xFFD6D6D6),
-        fontSize = 15.sp,
+        fontSize = 18.sp,
         fontWeight = FontWeight.Bold
     )
 }
@@ -410,11 +410,11 @@ fun TimerButton(
 ) {
     Button(
         onClick = onClick,
-        modifier = modifier.height(56.dp),
+        modifier = modifier.height(62.dp),
         shape = RoundedCornerShape(12.dp),
         colors = ButtonDefaults.buttonColors(containerColor = color)
     ) {
-        Text(text, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text(text, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
     }
 }
 

@@ -20,6 +20,7 @@ import com.example.escaperoomtimer.service.TimerForegroundService
 import com.example.escaperoomtimer.ui.home.HomeScreen
 import com.example.escaperoomtimer.ui.setting.SettingScreen
 import com.example.escaperoomtimer.ui.timer.TimerScreen
+import com.example.escaperoomtimer.ui.theme.EscapeRoomTimerTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -29,7 +30,7 @@ class MainActivity : ComponentActivity() {
         requestNotificationPermissionIfNeeded()
         startTimerForegroundService()
 
-        setContent { EscapeRoomManagerApp() }
+        setContent { EscapeRoomTimerTheme { EscapeRoomManagerApp() } }
     }
 
     override fun onStop() {

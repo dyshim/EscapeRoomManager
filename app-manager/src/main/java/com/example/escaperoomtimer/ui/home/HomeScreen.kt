@@ -65,31 +65,31 @@ fun HomeScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0B0F12))
-            .padding(18.dp)
+            .background(Color.Black)
+            .padding(horizontal = 16.dp, vertical = 14.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("☰", color = Color.White, fontSize = 28.sp)
-            Text("방탈출 운영", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text("☰", color = Color.White, fontSize = 32.sp)
+            Text("방탈출 운영", color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Bold)
             Text(
                 text = "⚙",
                 color = Color.White,
-                fontSize = 24.sp,
+                fontSize = 27.sp,
                 modifier = Modifier.clickable(onClick = onSettingsClick)
             )
         }
 
         Spacer(Modifier.height(14.dp))
-        HorizontalDivider(color = Color(0xFF2A2F35))
+        HorizontalDivider(color = Color(0xFF343B42))
         Spacer(Modifier.height(14.dp))
 
-        Text("현재 시간", color = Color(0xFF8D96A0), fontSize = 12.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
-        Text(currentTime, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.CenterHorizontally))
-        Text("손님용 연결 주소  $localIp:45991", color = Color(0xFF44D17A), fontSize = 12.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
+        Text("현재 시간", color = Color(0xFFC8D0D7), fontSize = 15.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
+        Text(currentTime, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.CenterHorizontally))
+        Text("손님용 연결 주소  $localIp:45991", color = Color(0xFF65E38D), fontSize = 14.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
 
         Spacer(Modifier.height(18.dp))
 
@@ -99,13 +99,13 @@ fun HomeScreen(
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text("사용 중인 방이 없습니다.", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text("아래 버튼으로 방을 추가하거나 설정에서 방을 활성화하세요.", color = Color(0xFF8D96A0), fontSize = 13.sp)
+                Text("사용 중인 방이 없습니다.", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text("아래 버튼으로 방을 추가하거나 설정에서 방을 활성화하세요.", color = Color(0xFFC8D0D7), fontSize = 15.sp)
             }
         } else {
             LazyColumn(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(rooms, key = { it.id }) { room ->
                     RoomCard(room = room, onClick = { onRoomClick(room) })
@@ -121,11 +121,11 @@ fun HomeScreen(
                 roomMinutes = "60"
                 showAddDialog = true
             },
-            modifier = Modifier.fillMaxWidth().height(58.dp),
+            modifier = Modifier.fillMaxWidth().height(64.dp),
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF7A00))
         ) {
-            Text("+ 새 방 추가", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text("+ 새 방 추가", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         }
     }
 
@@ -134,7 +134,7 @@ fun HomeScreen(
             onDismissRequest = { showAddDialog = false },
             title = { Text("새 방 추가") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
                         value = roomName,
                         onValueChange = { roomName = it },
