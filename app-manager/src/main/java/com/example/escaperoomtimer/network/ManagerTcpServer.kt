@@ -3,6 +3,7 @@ package com.example.escaperoomtimer.network
 import com.example.escaperoomshared.model.SharedRoomState
 import com.example.escaperoomshared.network.TcpProtocol
 import com.example.escaperoomtimer.manager.HintProgressManager
+import com.example.escaperoomtimer.manager.TimerManager
 import com.example.escaperoomtimer.model.RoomInfo
 import java.io.BufferedReader
 import java.io.BufferedWriter
@@ -110,6 +111,10 @@ object ManagerTcpServer {
                     when (val message = TcpProtocol.decode(line)) {
                         is TcpProtocol.Message.HintUsed -> {
                             HintProgressManager.recordHintUsage(message.event)
+                        }
+                        is TcpProtocol.Message.StartRequest -> {
+                            TimerManager.start(message.roomId)
+                            broadcastRooms(TimerManager.rooms)
                         }
                         TcpProtocol.Message.Ping -> sendLine(client, TcpProtocol.encodePong())
                         else -> Unit

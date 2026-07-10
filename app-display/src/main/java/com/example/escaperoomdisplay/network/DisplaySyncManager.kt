@@ -121,6 +121,28 @@ object DisplaySyncManager {
         }
     }
 
+
+    fun requestStart(roomId: String): Boolean {
+        if (_debugDemoActive.value) {
+            startDebugRoom(roomId)
+            return true
+        }
+        return tcpClient.sendStartRequest(roomId)
+    }
+
+    private fun startDebugRoom(roomId: String) {
+        val room = roomsById[roomId] ?: return
+        val now = System.currentTimeMillis()
+        val startSeconds = room.seconds.coerceAtLeast(1)
+        roomsById[roomId] = room.copy(
+            seconds = startSeconds,
+            status = if (startSeconds <= 300) "WARNING" else "RUNNING",
+            isRunning = true,
+            updatedAtMillis = now
+        )
+        publishCurrentRooms(now)
+    }
+
     fun sendHintUsage(roomId: String, hintNumber: Int): Boolean {
         return tcpClient.sendHint(
             HintUsageEvent(

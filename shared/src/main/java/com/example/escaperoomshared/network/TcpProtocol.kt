@@ -14,6 +14,7 @@ object TcpProtocol {
     sealed interface Message {
         data class RoomState(val room: SharedRoomState) : Message
         data class HintUsed(val event: HintUsageEvent) : Message
+        data class StartRequest(val roomId: String) : Message
         data object Ping : Message
         data object Pong : Message
     }
@@ -35,6 +36,12 @@ object TcpProtocol {
         encode(event.roomId),
         event.hintNumber.coerceAtLeast(1).toString(),
         event.usedAtMillis.toString()
+    ).joinToString(SEP)
+
+    fun encodeStartRequest(roomId: String): String = listOf(
+        VERSION,
+        "START",
+        encode(roomId)
     ).joinToString(SEP)
 
     fun encodePing(): String = "$VERSION${SEP}PING"
@@ -67,6 +74,10 @@ object TcpProtocol {
                         usedAtMillis = fields[4].toLong()
                     )
                 )
+            }
+            "START" -> {
+                if (fields.size != 3) return null
+                Message.StartRequest(decodeField(fields[2]))
             }
             "PING" -> Message.Ping
             "PONG" -> Message.Pong

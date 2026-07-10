@@ -40,6 +40,20 @@ object TimerManager {
         return rooms.firstOrNull { it.id == roomId }
     }
 
+    /** Starts a room without toggling it back to pause when duplicate requests arrive. */
+    fun start(roomId: String) {
+        updateRoom(roomId) { room ->
+            if (room.isRunning) return@updateRoom room
+
+            val startSeconds = if (room.seconds <= 0) room.defaultMinutes * 60 else room.seconds
+            room.copy(
+                seconds = startSeconds,
+                isRunning = true,
+                status = runningStatusFromSeconds(startSeconds)
+            )
+        }
+    }
+
     fun startOrPause(roomId: String) {
         updateRoom(roomId) { room ->
             if (room.status == RoomStatus.FINISHED && room.seconds <= 0) return@updateRoom room

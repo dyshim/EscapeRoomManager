@@ -42,6 +42,12 @@ class DisplayTcpClient(
         onConnectionChanged(false)
     }
 
+
+    fun sendStartRequest(roomId: String): Boolean {
+        if (roomId.isBlank()) return false
+        return sendRawChecked(TcpProtocol.encodeStartRequest(roomId))
+    }
+
     fun sendHint(event: HintUsageEvent): Boolean {
         val line = TcpProtocol.encodeHint(event)
         return runCatching {
@@ -90,6 +96,22 @@ class DisplayTcpClient(
             if (running.get()) {
                 try { Thread.sleep(2_000L) } catch (_: InterruptedException) { }
             }
+        }
+    }
+
+
+    private fun sendRawChecked(line: String): Boolean {
+        return runCatching {
+            val currentWriter = writer ?: return false
+            synchronized(sendLock) {
+                currentWriter.write(line)
+                currentWriter.newLine()
+                currentWriter.flush()
+            }
+            true
+        }.getOrElse {
+            closeSocket()
+            false
         }
     }
 

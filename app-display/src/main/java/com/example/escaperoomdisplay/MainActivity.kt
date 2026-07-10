@@ -29,7 +29,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,7 +41,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.escaperoomdisplay.network.DisplaySyncManager
-import com.example.escaperoomdisplay.network.HintUsageSender
 import com.example.escaperoomdisplay.ui.theme.EscapeRoomTimerTheme
 import com.example.escaperoomdisplay.util.openHintApp
 import com.example.escaperoomshared.model.SharedRoomState
@@ -96,6 +94,7 @@ private fun DisplayApp() {
             room = selectedRoom,
             lastReceivedAtMillis = lastReceivedAt,
             debugDemoActive = debugDemoActive,
+            onStartRoom = DisplaySyncManager::requestStart,
             onChangeRoom = { DisplaySyncManager.clearSelectedRoom(context) },
             onStopDebugDemo = {
                 DisplaySyncManager.stopDebugDemo()
@@ -306,16 +305,14 @@ private fun GuestDisplayScreen(
     room: SharedRoomState?,
     lastReceivedAtMillis: Long,
     debugDemoActive: Boolean,
+    onStartRoom: (String) -> Boolean,
     onChangeRoom: () -> Unit,
     onStopDebugDemo: () -> Unit
 ) {
     val context = LocalContext.current
     val showDebugTools = isDebugBuild(context)
-    val roomId = room?.id
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    var hintNumber by remember(roomId) {
-        mutableIntStateOf(loadNextHintNumber(context, roomId))
-    }
+    var startRequestPending by remember(room?.id) { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -324,12 +321,18 @@ private fun GuestDisplayScreen(
         }
     }
 
+    LaunchedEffect(room?.isRunning) {
+        if (room?.isRunning == true) startRequestPending = false
+    }
+
     BackHandler(enabled = true) {
         // Prevent guests from leaving the display screen accidentally.
     }
 
-    val isConnected = lastReceivedAtMillis > 0L && now - lastReceivedAtMillis <= 5_000L
+    val isConnected = debugDemoActive ||
+        (lastReceivedAtMillis > 0L && now - lastReceivedAtMillis <= 5_000L)
     val roomName = room?.name ?: "선택한 방을 기다리는 중"
+    val showStartButton = room != null && !room.isRunning
     val timeText = room?.seconds?.let(::formatTime) ?: "--:--"
     val timeColor = when {
         !isConnected -> Color(0xFF9AA4AD)
@@ -348,15 +351,15 @@ private fun GuestDisplayScreen(
         Text(
             text = when {
                 debugDemoActive -> "디버그 테스트 모드"
-                isConnected -> "손님용 화면"
+                isConnected -> "직원용 앱 연결됨"
                 else -> "연결 끊김"
             },
             color = when {
                 debugDemoActive -> Color(0xFF9C6ADE)
-                isConnected -> Color(0xFFFFB000)
+                isConnected -> Color(0xFF44D17A)
                 else -> Color(0xFFFF4B4B)
             },
-            fontSize = 18.sp,
+            fontSize = 16.sp,
             fontWeight = FontWeight.Bold
         )
 
@@ -365,87 +368,68 @@ private fun GuestDisplayScreen(
         Text(
             text = roomName,
             color = Color.White,
-            fontSize = 32.sp,
+            fontSize = 30.sp,
             fontWeight = FontWeight.Bold
         )
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(22.dp))
 
-        Text(
-            text = timeText,
-            color = timeColor,
-            fontSize = 82.sp,
-            fontWeight = FontWeight.Bold
-        )
-
-        Text(
-            text = when {
-                debugDemoActive -> "가짜 타이머가 1초마다 감소하는 중"
-                !isConnected -> "직원용 앱과 연결을 확인해 주세요."
-                room == null -> "선택한 방의 상태를 기다리는 중입니다."
-                else -> "직원용 앱과 실시간 동기화 중"
-            },
-            color = Color(0xFF9AA4AD),
-            fontSize = 14.sp
-        )
-
-        Spacer(Modifier.height(30.dp))
-
-        Text(
-            text = "사용할 힌트 번호",
-            color = Color(0xFFB9A7C9),
-            fontSize = 14.sp
-        )
-
-        Spacer(Modifier.height(8.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            OutlinedButton(
+        if (showStartButton) {
+            Button(
                 onClick = {
-                    hintNumber = (hintNumber - 1).coerceAtLeast(1)
-                    saveNextHintNumber(context, roomId, hintNumber)
+                    val roomId = room?.id ?: return@Button
+                    if (onStartRoom(roomId)) startRequestPending = true
                 },
-                modifier = Modifier.weight(1f)
+                enabled = isConnected && !startRequestPending,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(76.dp),
+                shape = RoundedCornerShape(18.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6F3CC3))
             ) {
-                Text("-")
+                Text(
+                    text = if (startRequestPending) "시작 요청 중..." else "START",
+                    color = Color.White,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
 
+            Spacer(Modifier.height(14.dp))
+
             Text(
-                text = "${hintNumber}번",
-                color = Color.White,
-                fontSize = 26.sp,
+                text = if (isConnected) {
+                    "START를 누르면 직원용 타이머가 시작됩니다."
+                } else {
+                    "직원용 앱과 연결되면 START를 누를 수 있습니다."
+                },
+                color = Color(0xFF9AA4AD),
+                fontSize = 13.sp
+            )
+        } else {
+            Text(
+                text = timeText,
+                color = timeColor,
+                fontSize = 82.sp,
                 fontWeight = FontWeight.Bold
             )
 
-            OutlinedButton(
-                onClick = {
-                    hintNumber += 1
-                    saveNextHintNumber(context, roomId, hintNumber)
+            Text(
+                text = when {
+                    !isConnected -> "직원용 앱과 연결을 확인해 주세요."
+                    room == null -> "선택한 방의 상태를 기다리는 중입니다."
+                    room.isRunning -> "게임 진행 중"
+                    else -> statusLabel(room)
                 },
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("+")
-            }
+                color = Color(0xFF9AA4AD),
+                fontSize = 14.sp
+            )
         }
 
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(30.dp))
 
         Button(
-            onClick = {
-                val currentRoomId = roomId
-                if (currentRoomId != null) {
-                    HintUsageSender.send(currentRoomId, hintNumber)
-                    val nextHintNumber = hintNumber + 1
-                    saveNextHintNumber(context, currentRoomId, nextHintNumber)
-                    hintNumber = nextHintNumber
-                    openHintApp(context)
-                }
-            },
-            enabled = roomId != null,
+            onClick = { openHintApp(context) },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(64.dp),
@@ -453,22 +437,14 @@ private fun GuestDisplayScreen(
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5E2B86))
         ) {
             Text(
-                text = "${hintNumber}번 힌트 사용",
+                text = "힌트 앱 열기",
                 color = Color.White,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold
             )
         }
 
-        Spacer(Modifier.height(10.dp))
-
-        Text(
-            text = "버튼을 누르면 사용 기록을 직원용 앱에 보내고 힌트앱을 엽니다.",
-            color = Color(0xFF687078),
-            fontSize = 12.sp
-        )
-
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(18.dp))
 
         Text(
             text = "방 변경",
@@ -508,22 +484,4 @@ private fun formatTime(totalSeconds: Int): String {
 
 private fun isDebugBuild(context: Context): Boolean {
     return context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
-}
-
-
-private const val HINT_PREFS_NAME = "display_hint_preferences"
-
-private fun loadNextHintNumber(context: Context, roomId: String?): Int {
-    if (roomId == null) return 1
-    return context.getSharedPreferences(HINT_PREFS_NAME, Context.MODE_PRIVATE)
-        .getInt("next_hint_$roomId", 1)
-        .coerceAtLeast(1)
-}
-
-private fun saveNextHintNumber(context: Context, roomId: String?, hintNumber: Int) {
-    if (roomId == null) return
-    context.getSharedPreferences(HINT_PREFS_NAME, Context.MODE_PRIVATE)
-        .edit()
-        .putInt("next_hint_$roomId", hintNumber.coerceAtLeast(1))
-        .apply()
 }
