@@ -5,6 +5,7 @@ import android.os.Handler
 import android.os.Looper
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
+import com.example.escaperoomdisplay.alarm.DisplayGameEndAlarmController
 import com.example.escaperoomshared.model.HintUsageEvent
 import com.example.escaperoomshared.model.SharedRoomState
 import com.example.escaperoomdisplay.widget.DisplayRoomWidgetProvider
@@ -69,6 +70,7 @@ object DisplaySyncManager {
     @Synchronized
     fun stop() {
         stopDebugDemo()
+        DisplayGameEndAlarmController.stop()
         tcpClient.disconnect()
         appContext = null
     }
@@ -172,9 +174,13 @@ object DisplaySyncManager {
             override fun run() {
                 if (!_debugDemoActive.value) return
                 val tickAt = System.currentTimeMillis()
-                val updated = roomsById.mapValues { (_, room) ->
+                val selectedId = _selectedRoomId.value
+                val updated = roomsById.mapValues { (roomId, room) ->
                     if (room.isRunning && room.seconds > 0) {
                         val next = room.seconds - 1
+                        if (next == 0 && roomId == selectedId) {
+                            appContext?.let(DisplayGameEndAlarmController::play)
+                        }
                         room.copy(
                             seconds = next,
                             status = if (next <= 0) "FINISHED" else if (next <= 300) "WARNING" else "RUNNING",
@@ -208,7 +214,18 @@ object DisplaySyncManager {
     @Synchronized
     private fun updateRoom(room: SharedRoomState) {
         if (_debugDemoActive.value) return
+        val previous = roomsById[room.id]
+        val selectedId = _selectedRoomId.value
         roomsById[room.id] = room
+        if (
+            room.id == selectedId &&
+            previous?.isRunning == true &&
+            previous.seconds > 0 &&
+            room.seconds <= 0 &&
+            !room.isRunning
+        ) {
+            appContext?.let(DisplayGameEndAlarmController::play)
+        }
         publishCurrentRooms(System.currentTimeMillis())
     }
 

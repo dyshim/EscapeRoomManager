@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.escaperoomtimer.alarm.ManagerGameEndAlarmController
 import com.example.escaperoomtimer.manager.TimerManager
 import com.example.escaperoomtimer.model.RoomStatus
 import com.example.escaperoomtimer.util.formatTime
@@ -48,6 +49,7 @@ fun TimerScreen(
     onBack: () -> Unit
 ) {
     val room = TimerManager.getRoom(roomId) ?: return
+    val alarmActive by ManagerGameEndAlarmController.isActive
 
     var minuteInput by remember(room.id) { mutableStateOf((room.seconds / 60).toString()) }
     var secondInput by remember(room.id) { mutableStateOf((room.seconds % 60).toString()) }
@@ -117,6 +119,16 @@ fun TimerScreen(
             fontSize = 17.sp,
             fontWeight = FontWeight.Bold
         )
+
+        if (room.status == RoomStatus.FINISHED && alarmActive) {
+            Spacer(Modifier.height(12.dp))
+            TimerButton(
+                text = "알람 끄기",
+                color = Color(0xFF9B211B),
+                modifier = Modifier.fillMaxWidth(),
+                onClick = ManagerGameEndAlarmController::stop
+            )
+        }
 
         Spacer(Modifier.height(18.dp))
 

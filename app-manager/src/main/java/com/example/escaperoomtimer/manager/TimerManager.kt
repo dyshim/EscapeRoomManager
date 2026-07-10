@@ -6,6 +6,7 @@ import com.example.escaperoomtimer.model.RoomInfo
 import com.example.escaperoomtimer.model.RoomStatus
 import com.example.escaperoomtimer.repository.RoomRepository
 import com.example.escaperoomtimer.repository.RoomStateRepository
+import java.util.ArrayDeque
 
 object TimerManager {
     private const val SAVE_INTERVAL_TICKS = 5
@@ -13,6 +14,7 @@ object TimerManager {
     private var appContext: Context? = null
     private var initialized = false
     private var ticksSinceLastSave = 0
+    private val naturallyCompletedRoomIds = ArrayDeque<String>()
 
     val rooms = mutableStateListOf(
         RoomInfo("room1", "ROOM 1", 32 * 60 + 45, RoomStatus.PAUSED, isRunning = false, defaultMinutes = 60),
@@ -174,6 +176,9 @@ object TimerManager {
                     isRunning = nextSeconds > 0,
                     status = if (nextSeconds == 0) RoomStatus.FINISHED else runningStatusFromSeconds(nextSeconds)
                 )
+                if (nextSeconds == 0) {
+                    naturallyCompletedRoomIds.addLast(room.id)
+                }
                 changed = true
             }
         }
@@ -184,6 +189,15 @@ object TimerManager {
                 persistNow()
             }
         }
+    }
+
+
+    @Synchronized
+    fun consumeNaturallyCompletedRoomIds(): List<String> {
+        if (naturallyCompletedRoomIds.isEmpty()) return emptyList()
+        val result = naturallyCompletedRoomIds.toList()
+        naturallyCompletedRoomIds.clear()
+        return result
     }
 
     fun persistNow() {

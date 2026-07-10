@@ -45,6 +45,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.text.KeyboardOptions
+import com.example.escaperoomdisplay.alarm.DisplayGameEndAlarmController
 import com.example.escaperoomdisplay.network.DisplaySyncManager
 import com.example.escaperoomdisplay.settings.DisplayAdminPreferences
 import com.example.escaperoomdisplay.ui.theme.EscapeRoomTimerTheme
@@ -317,6 +318,7 @@ private fun GuestDisplayScreen(
 ) {
     val context = LocalContext.current
     val showDebugTools = isDebugBuild(context)
+    val alarmActive by DisplayGameEndAlarmController.isActive
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var startRequestPending by remember(room?.id) { mutableStateOf(false) }
     var titleTapCount by remember { mutableStateOf(0) }
@@ -343,7 +345,8 @@ private fun GuestDisplayScreen(
     val isConnected = debugDemoActive ||
         (lastReceivedAtMillis > 0L && now - lastReceivedAtMillis <= 5_000L)
     val roomName = room?.name ?: "선택한 방을 기다리는 중"
-    val showStartButton = room != null && !room.isRunning
+    val isGameFinished = room != null && room.seconds <= 0 && !room.isRunning
+    val showStartButton = room != null && !room.isRunning && !isGameFinished
     val timeText = room?.seconds?.let(::formatTime) ?: "--:--"
     val timeColor = when {
         !isConnected -> Color(0xFF9AA4AD)
@@ -442,14 +445,26 @@ private fun GuestDisplayScreen(
 
             Text(
                 text = when {
+                    isGameFinished -> "게임 종료"
                     !isConnected -> "직원용 앱과 연결을 확인해 주세요."
                     room == null -> "선택한 방의 상태를 기다리는 중입니다."
                     room.isRunning -> "게임 진행 중"
                     else -> statusLabel(room)
                 },
-                color = Color(0xFF9AA4AD),
-                fontSize = 14.sp
+                color = if (isGameFinished) Color(0xFFFF4B4B) else Color(0xFF9AA4AD),
+                fontSize = if (isGameFinished) 22.sp else 14.sp,
+                fontWeight = if (isGameFinished) FontWeight.Bold else FontWeight.Normal
             )
+
+            if (isGameFinished && alarmActive) {
+                Spacer(Modifier.height(14.dp))
+                OutlinedButton(
+                    onClick = DisplayGameEndAlarmController::stop,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("알람 끄기")
+                }
+            }
         }
 
         Spacer(Modifier.height(30.dp))

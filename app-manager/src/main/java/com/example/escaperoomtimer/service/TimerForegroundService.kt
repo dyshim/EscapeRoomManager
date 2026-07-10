@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import androidx.core.app.NotificationManagerCompat
+import com.example.escaperoomtimer.alarm.ManagerGameEndAlarmController
 import com.example.escaperoomtimer.manager.HintProgressManager
 import com.example.escaperoomtimer.manager.TimerManager
 import com.example.escaperoomtimer.notification.TimerNotificationHelper
@@ -18,6 +19,9 @@ class TimerForegroundService : Service() {
     private val ticker = object : Runnable {
         override fun run() {
             TimerManager.tickAll()
+            if (TimerManager.consumeNaturallyCompletedRoomIds().isNotEmpty()) {
+                ManagerGameEndAlarmController.play(applicationContext)
+            }
             updateNotification()
             handler.postDelayed(this, 1000L)
         }
@@ -43,6 +47,7 @@ class TimerForegroundService : Service() {
 
     override fun onDestroy() {
         TimerManager.persistNow()
+        ManagerGameEndAlarmController.stop()
         ManagerTcpServer.stop()
         HintProgressManager.stop()
         handler.removeCallbacks(ticker)
