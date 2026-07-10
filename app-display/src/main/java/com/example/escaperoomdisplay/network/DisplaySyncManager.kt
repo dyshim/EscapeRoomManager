@@ -7,6 +7,8 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import com.example.escaperoomshared.model.HintUsageEvent
 import com.example.escaperoomshared.model.SharedRoomState
+import com.example.escaperoomdisplay.widget.DisplayRoomWidgetProvider
+import com.example.escaperoomdisplay.widget.DisplayWidgetStateRepository
 
 object DisplaySyncManager {
     private const val PREFS_NAME = "display_sync_preferences"
@@ -46,6 +48,7 @@ object DisplaySyncManager {
             mainHandler.post {
                 _isConnected.value = connected
                 if (connected && _debugDemoActive.value) stopDebugDemo()
+                persistWidgetState()
             }
         }
     )
@@ -105,6 +108,7 @@ object DisplaySyncManager {
         mainHandler.post {
             _selectedRoomId.value = roomId
             _selectedRoom.value = roomsById[roomId]
+            persistWidgetState()
         }
     }
 
@@ -118,6 +122,7 @@ object DisplaySyncManager {
         mainHandler.post {
             _selectedRoomId.value = null
             _selectedRoom.value = null
+            persistWidgetState()
         }
     }
 
@@ -214,6 +219,17 @@ object DisplaySyncManager {
             _rooms.value = list
             _selectedRoom.value = selected
             _lastReceivedAtMillis.value = receivedAt
+            persistWidgetState()
         }
+    }
+
+    private fun persistWidgetState() {
+        val context = appContext ?: return
+        DisplayWidgetStateRepository.save(
+            context = context,
+            room = _selectedRoom.value,
+            connected = _isConnected.value || _debugDemoActive.value
+        )
+        DisplayRoomWidgetProvider.updateAll(context)
     }
 }

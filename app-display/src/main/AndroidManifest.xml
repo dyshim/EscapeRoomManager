@@ -18,6 +18,19 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.EscapeRoomTimer">
 
+
+        <receiver
+            android:name=".widget.DisplayRoomWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/display_room_widget_info" />
+        </receiver>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

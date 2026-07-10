@@ -13,6 +13,9 @@ import com.example.escaperoomtimer.manager.TimerManager
 import com.example.escaperoomtimer.model.RoomInfo
 import com.example.escaperoomtimer.model.RoomStatus
 import com.example.escaperoomtimer.util.formatTime
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class RoomStatusWidgetProvider : AppWidgetProvider() {
 
@@ -50,6 +53,14 @@ class RoomStatusWidgetProvider : AppWidgetProvider() {
             R.id.widget_room_5_time
         )
 
+        private val roomEndViewIds = intArrayOf(
+            R.id.widget_room_1_end,
+            R.id.widget_room_2_end,
+            R.id.widget_room_3_end,
+            R.id.widget_room_4_end,
+            R.id.widget_room_5_end
+        )
+
         fun updateAll(context: Context) {
             val appContext = context.applicationContext
             TimerManager.initialize(appContext)
@@ -85,10 +96,12 @@ class RoomStatusWidgetProvider : AppWidgetProvider() {
                 if (room == null) {
                     views.setTextViewText(roomNameViewIds[index], "-")
                     views.setTextViewText(roomTimeViewIds[index], "")
+                    views.setTextViewText(roomEndViewIds[index], "")
                     views.setTextColor(roomTimeViewIds[index], 0xFF777777.toInt())
                 } else {
                     views.setTextViewText(roomNameViewIds[index], room.name)
                     views.setTextViewText(roomTimeViewIds[index], statusText(room))
+                    views.setTextViewText(roomEndViewIds[index], expectedEndText(room))
                     views.setTextColor(roomTimeViewIds[index], statusColor(room))
                 }
             }
@@ -100,6 +113,20 @@ class RoomStatusWidgetProvider : AppWidgetProvider() {
             RoomStatus.WAITING -> "대기중"
             RoomStatus.FINISHED -> "종료"
             else -> formatTime(room.seconds)
+        }
+
+        private fun expectedEndText(room: RoomInfo): String = when {
+            room.status == RoomStatus.FINISHED || room.seconds <= 0 -> "종료됨"
+            room.isRunning -> {
+                val expectedAt = System.currentTimeMillis() + room.seconds * 1_000L
+                "종료 ${formatExpectedTime(expectedAt)}"
+            }
+            room.status == RoomStatus.PAUSED -> "일시정지"
+            else -> "시작 후 표시"
+        }
+
+        private fun formatExpectedTime(timeMillis: Long): String {
+            return SimpleDateFormat("a h:mm", Locale.KOREA).format(Date(timeMillis))
         }
 
         private fun statusColor(room: RoomInfo): Int = when (room.status) {
