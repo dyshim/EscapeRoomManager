@@ -22,6 +22,7 @@ class TimerForegroundService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        TimerManager.initialize(applicationContext)
         TimerNotificationHelper.createChannel(this)
         startForeground(
             TimerNotificationHelper.NOTIFICATION_ID,
@@ -36,6 +37,7 @@ class TimerForegroundService : Service() {
     }
 
     override fun onDestroy() {
+        TimerManager.persistNow()
         handler.removeCallbacks(ticker)
         super.onDestroy()
     }

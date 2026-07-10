@@ -24,12 +24,18 @@ import androidx.compose.runtime.setValue
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        TimerManager.initialize(applicationContext)
         requestNotificationPermissionIfNeeded()
         startTimerForegroundService()
 
         setContent {
             EscapeRoomManagerApp()
         }
+    }
+
+    override fun onStop() {
+        TimerManager.persistNow()
+        super.onStop()
     }
 
     private fun startTimerForegroundService() {

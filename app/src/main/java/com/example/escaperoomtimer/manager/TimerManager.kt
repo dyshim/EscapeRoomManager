@@ -1,11 +1,19 @@
 package com.example.escaperoomtimer.manager
 
+import android.content.Context
 import androidx.compose.runtime.mutableStateListOf
 import com.example.escaperoomtimer.model.RoomInfo
 import com.example.escaperoomtimer.model.RoomStatus
 import com.example.escaperoomtimer.repository.RoomRepository
+import com.example.escaperoomtimer.repository.RoomStateRepository
 
 object TimerManager {
+    private const val SAVE_INTERVAL_TICKS = 5
+
+    private var appContext: Context? = null
+    private var initialized = false
+    private var ticksSinceLastSave = 0
+
     val rooms = mutableStateListOf(
         RoomInfo("room1", "ROOM 1", 32 * 60 + 45, RoomStatus.PAUSED, isRunning = false, defaultMinutes = 60),
         RoomInfo("room2", "ROOM 2", 4 * 60 + 58, RoomStatus.WARNING, isRunning = false, defaultMinutes = 60),
@@ -13,6 +21,20 @@ object TimerManager {
         RoomInfo("room4", "ROOM 4", 60 * 60, RoomStatus.WAITING, isRunning = false, defaultMinutes = 60),
         RoomInfo("room5", "ROOM 5", 0, RoomStatus.FINISHED, isRunning = false, defaultMinutes = 60)
     )
+
+    /** Must be called before the UI/service starts using the timers. */
+    @Synchronized
+    fun initialize(context: Context) {
+        appContext = context.applicationContext
+        if (initialized) return
+
+        RoomStateRepository.load(context.applicationContext)?.let { savedRooms ->
+            rooms.clear()
+            rooms.addAll(savedRooms)
+        }
+        initialized = true
+        persistNow()
+    }
 
     fun getRoom(roomId: String): RoomInfo? {
         return rooms.firstOrNull { it.id == roomId }
@@ -87,6 +109,8 @@ object TimerManager {
     }
 
     fun tickAll() {
+        var changed = false
+
         rooms.forEachIndexed { index, room ->
             if (room.isRunning && room.seconds > 0) {
                 val nextSeconds = (room.seconds - 1).coerceAtLeast(0)
@@ -95,7 +119,22 @@ object TimerManager {
                     isRunning = nextSeconds > 0,
                     status = if (nextSeconds == 0) RoomStatus.FINISHED else runningStatusFromSeconds(nextSeconds)
                 )
+                changed = true
             }
+        }
+
+        if (changed) {
+            ticksSinceLastSave++
+            if (ticksSinceLastSave >= SAVE_INTERVAL_TICKS) {
+                persistNow()
+            }
+        }
+    }
+
+    fun persistNow() {
+        ticksSinceLastSave = 0
+        appContext?.let { context ->
+            RoomStateRepository.save(context, rooms)
         }
     }
 
@@ -103,6 +142,7 @@ object TimerManager {
         val index = rooms.indexOfFirst { it.id == roomId }
         if (index >= 0) {
             rooms[index] = block(rooms[index])
+            persistNow()
         }
     }
 
