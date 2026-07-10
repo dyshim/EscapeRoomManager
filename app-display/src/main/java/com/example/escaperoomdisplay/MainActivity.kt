@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -26,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,9 +40,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.text.KeyboardOptions
 import com.example.escaperoomdisplay.network.DisplaySyncManager
+import com.example.escaperoomdisplay.settings.DisplayAdminPreferences
 import com.example.escaperoomdisplay.ui.theme.EscapeRoomTimerTheme
 import com.example.escaperoomdisplay.util.openHintApp
 import com.example.escaperoomshared.model.SharedRoomState
@@ -313,6 +319,11 @@ private fun GuestDisplayScreen(
     val showDebugTools = isDebugBuild(context)
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var startRequestPending by remember(room?.id) { mutableStateOf(false) }
+    var titleTapCount by remember { mutableStateOf(0) }
+    var firstTitleTapAt by remember { mutableLongStateOf(0L) }
+    var showPinDialog by remember { mutableStateOf(false) }
+    var showAdminMenu by remember { mutableStateOf(false) }
+    var showPinChangeDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -369,7 +380,22 @@ private fun GuestDisplayScreen(
             text = roomName,
             color = Color.White,
             fontSize = 30.sp,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.clickable {
+                val tappedAt = System.currentTimeMillis()
+                if (firstTitleTapAt == 0L || tappedAt - firstTitleTapAt > 3_000L) {
+                    firstTitleTapAt = tappedAt
+                    titleTapCount = 1
+                } else {
+                    titleTapCount += 1
+                }
+
+                if (titleTapCount >= 5) {
+                    titleTapCount = 0
+                    firstTitleTapAt = 0L
+                    showPinDialog = true
+                }
+            }
         )
 
         Spacer(Modifier.height(22.dp))
@@ -446,15 +472,6 @@ private fun GuestDisplayScreen(
 
         Spacer(Modifier.height(18.dp))
 
-        Text(
-            text = "방 변경",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 13.sp,
-            modifier = Modifier
-                .clickable(onClick = onChangeRoom)
-                .padding(10.dp)
-        )
-
         if (showDebugTools && debugDemoActive) {
             Text(
                 text = "테스트 종료",
@@ -466,6 +483,192 @@ private fun GuestDisplayScreen(
             )
         }
     }
+
+    if (showPinDialog) {
+        AdminPinDialog(
+            onDismiss = { showPinDialog = false },
+            onVerified = {
+                showPinDialog = false
+                showAdminMenu = true
+            }
+        )
+    }
+
+    if (showAdminMenu) {
+        AdminMenuDialog(
+            onDismiss = { showAdminMenu = false },
+            onChangeRoom = {
+                showAdminMenu = false
+                onChangeRoom()
+            },
+            onChangePin = {
+                showAdminMenu = false
+                showPinChangeDialog = true
+            }
+        )
+    }
+
+    if (showPinChangeDialog) {
+        ChangeAdminPinDialog(
+            onDismiss = { showPinChangeDialog = false },
+            onSaved = { showPinChangeDialog = false }
+        )
+    }
+}
+
+@Composable
+private fun AdminPinDialog(
+    onDismiss: () -> Unit,
+    onVerified: () -> Unit
+) {
+    val context = LocalContext.current
+    var pin by remember { mutableStateOf("") }
+    var errorText by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("관리자 PIN") },
+        text = {
+            Column {
+                Text("관리자 설정을 열려면 PIN을 입력하세요.")
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = pin,
+                    onValueChange = { value ->
+                        pin = value.filter(Char::isDigit).take(8)
+                        errorText = null
+                    },
+                    label = { Text("PIN") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    isError = errorText != null
+                )
+                errorText?.let {
+                    Spacer(Modifier.height(6.dp))
+                    Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (DisplayAdminPreferences.verifyPin(context, pin)) {
+                        onVerified()
+                    } else {
+                        errorText = "PIN이 올바르지 않습니다."
+                    }
+                },
+                enabled = pin.isNotEmpty()
+            ) {
+                Text("확인")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("취소") }
+        }
+    )
+}
+
+@Composable
+private fun AdminMenuDialog(
+    onDismiss: () -> Unit,
+    onChangeRoom: () -> Unit,
+    onChangePin: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("관리자 설정") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Button(
+                    onClick = onChangeRoom,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("방 변경")
+                }
+                OutlinedButton(
+                    onClick = onChangePin,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("관리자 PIN 변경")
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("닫기") }
+        }
+    )
+}
+
+@Composable
+private fun ChangeAdminPinDialog(
+    onDismiss: () -> Unit,
+    onSaved: () -> Unit
+) {
+    val context = LocalContext.current
+    var newPin by remember { mutableStateOf("") }
+    var confirmPin by remember { mutableStateOf("") }
+    var errorText by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("관리자 PIN 변경") },
+        text = {
+            Column {
+                Text("4~8자리 숫자로 설정하세요.")
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = newPin,
+                    onValueChange = {
+                        newPin = it.filter(Char::isDigit).take(8)
+                        errorText = null
+                    },
+                    label = { Text("새 PIN") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
+                )
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = confirmPin,
+                    onValueChange = {
+                        confirmPin = it.filter(Char::isDigit).take(8)
+                        errorText = null
+                    },
+                    label = { Text("새 PIN 확인") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    isError = errorText != null
+                )
+                errorText?.let {
+                    Spacer(Modifier.height(6.dp))
+                    Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    errorText = when {
+                        newPin.length !in 4..8 -> "PIN은 4~8자리 숫자여야 합니다."
+                        newPin != confirmPin -> "두 PIN이 서로 다릅니다."
+                        else -> null
+                    }
+                    if (errorText == null) {
+                        DisplayAdminPreferences.setPin(context, newPin)
+                        onSaved()
+                    }
+                }
+            ) {
+                Text("저장")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("취소") }
+        }
+    )
 }
 
 private fun statusLabel(room: SharedRoomState): String {
