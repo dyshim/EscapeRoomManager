@@ -9,7 +9,8 @@ data class RoomInfo(
     val defaultMinutes: Int = 60,
     val hintEnabled: Boolean = true,
     val guestScreenEnabled: Boolean = true,
-    val isEnabled: Boolean = true
+    val isEnabled: Boolean = true,
+    val isMaintenance: Boolean = false
 )
 
 enum class RoomStatus {

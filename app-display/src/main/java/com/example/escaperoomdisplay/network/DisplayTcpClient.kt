@@ -20,6 +20,7 @@ class DisplayTcpClient(
     private val sendLock = Any()
 
     @Volatile private var host: String = ""
+    @Volatile private var registeredRoomId: String = ""
     @Volatile private var socket: Socket? = null
     @Volatile private var writer: BufferedWriter? = null
     private var worker: Thread? = null
@@ -41,8 +42,16 @@ class DisplayTcpClient(
         onConnectionChanged(false)
     }
 
-    fun sendStartRequest(roomId: String): Boolean = roomId.isNotBlank() && sendRawChecked(TcpProtocol.encodeStartRequest(roomId))
+    fun registerRoom(roomId: String?) {
+        registeredRoomId = roomId.orEmpty()
+        if (registeredRoomId.isNotBlank()) {
+            sendRawChecked(TcpProtocol.encodeRegisterDisplay(registeredRoomId))
+        } else {
+            sendRawChecked(TcpProtocol.encodeUnregisterDisplay())
+        }
+    }
 
+    fun sendStartRequest(roomId: String): Boolean = roomId.isNotBlank() && sendRawChecked(TcpProtocol.encodeStartRequest(roomId))
     fun sendHint(event: HintUsageEvent): Boolean = sendRawChecked(TcpProtocol.encodeHint(event))
 
     private fun connectionLoop() {
@@ -55,6 +64,7 @@ class DisplayTcpClient(
                     socket = connectedSocket
                     writer = BufferedWriter(OutputStreamWriter(connectedSocket.getOutputStream()))
                     onConnectionChanged(true)
+                    if (registeredRoomId.isNotBlank()) sendRaw(TcpProtocol.encodeRegisterDisplay(registeredRoomId))
 
                     BufferedReader(InputStreamReader(connectedSocket.getInputStream())).useLines { lines ->
                         lines.forEach { line ->
@@ -73,31 +83,20 @@ class DisplayTcpClient(
                 socket = null
                 onConnectionChanged(false)
             }
-            if (running.get()) try { Thread.sleep(2_000L) } catch (_: InterruptedException) { }
+            if (running.get()) try { Thread.sleep(2_000L) } catch (_: InterruptedException) { Thread.currentThread().interrupt() }
         }
     }
 
     private fun sendRawChecked(line: String): Boolean = runCatching {
         val currentWriter = writer ?: return false
-        synchronized(sendLock) {
-            currentWriter.write(line)
-            currentWriter.newLine()
-            currentWriter.flush()
-        }
+        synchronized(sendLock) { currentWriter.write(line); currentWriter.newLine(); currentWriter.flush() }
         true
-    }.getOrElse {
-        closeSocket()
-        false
-    }
+    }.getOrElse { closeSocket(); false }
 
     private fun sendRaw(line: String) {
         runCatching {
             val currentWriter = writer ?: return
-            synchronized(sendLock) {
-                currentWriter.write(line)
-                currentWriter.newLine()
-                currentWriter.flush()
-            }
+            synchronized(sendLock) { currentWriter.write(line); currentWriter.newLine(); currentWriter.flush() }
         }
     }
 

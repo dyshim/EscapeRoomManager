@@ -63,6 +63,7 @@ object DisplaySyncManager {
 
         val prefs = contextApp.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         _selectedRoomId.value = prefs.getString(KEY_SELECTED_ROOM_ID, null)
+        tcpClient.registerRoom(_selectedRoomId.value)
         val savedHost = prefs.getString(KEY_SERVER_HOST, "")?.trim().orEmpty()
         _serverHost.value = savedHost
         if (savedHost.isNotBlank()) tcpClient.connect(savedHost)
@@ -111,6 +112,7 @@ object DisplaySyncManager {
         mainHandler.post {
             _selectedRoomId.value = roomId
             _selectedRoom.value = roomsById[roomId]
+            tcpClient.registerRoom(roomId)
             persistWidgetState()
         }
     }
@@ -125,6 +127,7 @@ object DisplaySyncManager {
         mainHandler.post {
             _selectedRoomId.value = null
             _selectedRoom.value = null
+            tcpClient.registerRoom(null)
             persistWidgetState()
         }
     }

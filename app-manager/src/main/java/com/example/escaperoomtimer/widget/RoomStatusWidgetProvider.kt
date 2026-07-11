@@ -101,13 +101,14 @@ class RoomStatusWidgetProvider : AppWidgetProvider() {
             return views
         }
 
-        private fun statusText(room: RoomInfo): String = when (room.status) {
+        private fun statusText(room: RoomInfo): String = if (room.isMaintenance) "유지보수" else when (room.status) {
             RoomStatus.WAITING -> "대기중"
             RoomStatus.FINISHED -> "종료"
             else -> formatTime(room.seconds)
         }
 
         private fun expectedEndText(room: RoomInfo): String = when {
+            room.isMaintenance -> "손님용 숨김"
             room.status == RoomStatus.FINISHED || room.seconds <= 0 -> "종료됨"
             room.isRunning -> "종료 ${formatExpectedTime(System.currentTimeMillis() + room.seconds * 1_000L)}"
             room.status == RoomStatus.PAUSED -> "일시정지"
@@ -116,7 +117,7 @@ class RoomStatusWidgetProvider : AppWidgetProvider() {
 
         private fun formatExpectedTime(timeMillis: Long) = SimpleDateFormat("a h:mm", Locale.KOREA).format(Date(timeMillis))
 
-        private fun statusColor(room: RoomInfo): Int = when (room.status) {
+        private fun statusColor(room: RoomInfo): Int = if (room.isMaintenance) 0xFF64B5F6.toInt() else when (room.status) {
             RoomStatus.RUNNING -> 0xFF4CD964.toInt()
             RoomStatus.WARNING -> 0xFFFF4B4B.toInt()
             RoomStatus.PAUSED -> 0xFFFFB000.toInt()

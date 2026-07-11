@@ -32,15 +32,16 @@ import com.example.escaperoomtimer.util.formatTime
 @Composable
 fun RoomCard(
     room: RoomInfo,
+    connectedDisplays: Int,
     onClick: () -> Unit
 ) {
-    val timeText = when (room.status) {
+    val timeText = if (room.isMaintenance) "유지보수" else when (room.status) {
         RoomStatus.WAITING -> "대기중"
         RoomStatus.FINISHED -> "종료"
         else -> formatTime(room.seconds)
     }
 
-    val timeColor = when (room.status) {
+    val timeColor = if (room.isMaintenance) Color(0xFF64B5F6) else when (room.status) {
         RoomStatus.WAITING -> Color(0xFF9E9E9E)
         RoomStatus.FINISHED -> Color(0xFF777777)
         RoomStatus.WARNING -> Color(0xFFFF4B4B)
@@ -48,7 +49,7 @@ fun RoomCard(
         RoomStatus.RUNNING -> Color(0xFF42E66F)
     }
 
-    val badgeText = when (room.status) {
+    val badgeText = if (room.isMaintenance) "유지보수" else when (room.status) {
         RoomStatus.WAITING -> "대기"
         RoomStatus.RUNNING -> "진행중"
         RoomStatus.WARNING -> if (room.isRunning) "5분 이하" else "일시정지"
@@ -56,7 +57,7 @@ fun RoomCard(
         RoomStatus.FINISHED -> "종료"
     }
 
-    val badgeColor = when (room.status) {
+    val badgeColor = if (room.isMaintenance) Color(0xFF174A6E) else when (room.status) {
         RoomStatus.WAITING -> Color(0xFF555555)
         RoomStatus.RUNNING -> Color(0xFF0F4A1E)
         RoomStatus.WARNING -> Color(0xFF5A1C1C)
@@ -67,7 +68,7 @@ fun RoomCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(92.dp)
+            .height(108.dp)
             .clickable { onClick() },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
@@ -103,6 +104,12 @@ fun RoomCard(
                         color = timeColor,
                         fontSize = 34.sp,
                         fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = if (room.isMaintenance) "손님용 선택에서 숨김" else if (connectedDisplays > 0) "손님 기기 ${connectedDisplays}대 연결" else "손님 기기 연결 없음",
+                        color = if (connectedDisplays > 0) Color(0xFF65E38D) else Color(0xFFB8C0C8),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
                     )
                 }
             }

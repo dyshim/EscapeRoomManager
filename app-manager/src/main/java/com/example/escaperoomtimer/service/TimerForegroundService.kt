@@ -14,6 +14,7 @@ import com.example.escaperoomtimer.network.ManagerTcpServer
 import com.example.escaperoomtimer.widget.RoomStatusWidgetProvider
 
 class TimerForegroundService : Service() {
+    private var heartbeatTicks = 0
     private val handler = Handler(Looper.getMainLooper())
 
     private val ticker = object : Runnable {
@@ -23,6 +24,11 @@ class TimerForegroundService : Service() {
                 ManagerGameEndAlarmController.play(applicationContext)
             }
             updateNotification()
+            heartbeatTicks++
+            if (heartbeatTicks >= 5) {
+                heartbeatTicks = 0
+                ManagerTcpServer.heartbeat()
+            }
             handler.postDelayed(this, 1000L)
         }
     }

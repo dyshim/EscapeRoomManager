@@ -82,6 +82,7 @@ fun EscapeRoomManagerApp() {
             onBack = { screenMode = ScreenMode.HOME },
             onSaveRoom = TimerManager::updateRoomSetting,
             onSetRoomEnabled = TimerManager::setRoomEnabled,
+            onSetMaintenance = TimerManager::setMaintenance,
             onDeleteRoom = TimerManager::deleteRoom,
             onMoveRoom = TimerManager::moveRoom,
             onAddRoom = TimerManager::addRoom

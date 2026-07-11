@@ -24,6 +24,7 @@ object RoomStateRepository {
                 put("hintEnabled", room.hintEnabled)
                 put("guestScreenEnabled", room.guestScreenEnabled)
                 put("isEnabled", room.isEnabled)
+                put("isMaintenance", room.isMaintenance)
             })
         }
 
@@ -67,7 +68,8 @@ object RoomStateRepository {
                             defaultMinutes = item.optInt("defaultMinutes", 60).coerceIn(1, 240),
                             hintEnabled = item.optBoolean("hintEnabled", true),
                             guestScreenEnabled = item.optBoolean("guestScreenEnabled", true),
-                            isEnabled = item.optBoolean("isEnabled", true)
+                            isEnabled = item.optBoolean("isEnabled", true),
+                            isMaintenance = item.optBoolean("isMaintenance", false)
                         )
                     )
                 }

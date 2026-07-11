@@ -37,6 +37,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.escaperoomtimer.model.RoomInfo
+import com.example.escaperoomtimer.network.ManagerTcpServer
 import com.example.escaperoomtimer.util.localIpv4Address
 import com.example.escaperoomtimer.util.nowText
 import kotlinx.coroutines.delay
@@ -108,7 +109,11 @@ fun HomeScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(rooms, key = { it.id }) { room ->
-                    RoomCard(room = room, onClick = { onRoomClick(room) })
+                    RoomCard(
+                        room = room,
+                        connectedDisplays = ManagerTcpServer.connectedCount(room.id),
+                        onClick = { onRoomClick(room) }
+                    )
                 }
             }
         }

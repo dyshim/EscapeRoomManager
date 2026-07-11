@@ -60,6 +60,20 @@ object TimerManager {
         return id
     }
 
+    fun setMaintenance(roomId: String, maintenance: Boolean): Boolean {
+        val index = rooms.indexOfFirst { it.id == roomId }
+        if (index < 0) return false
+        val room = rooms[index]
+        if (maintenance && room.isRunning) return false
+        rooms[index] = room.copy(
+            isMaintenance = maintenance,
+            isRunning = if (maintenance) false else room.isRunning,
+            status = if (maintenance) RoomStatus.WAITING else room.status
+        )
+        persistNow()
+        return true
+    }
+
     fun setRoomEnabled(roomId: String, enabled: Boolean): Boolean {
         val index = rooms.indexOfFirst { it.id == roomId }
         if (index < 0) return false
@@ -91,7 +105,7 @@ object TimerManager {
 
     fun start(roomId: String) {
         updateRoom(roomId) { room ->
-            if (!room.isEnabled || room.isRunning) return@updateRoom room
+            if (!room.isEnabled || room.isMaintenance || room.isRunning) return@updateRoom room
             val startSeconds = if (room.seconds <= 0) room.defaultMinutes * 60 else room.seconds
             room.copy(
                 seconds = startSeconds,
@@ -103,7 +117,7 @@ object TimerManager {
 
     fun startOrPause(roomId: String) {
         updateRoom(roomId) { room ->
-            if (!room.isEnabled || (room.status == RoomStatus.FINISHED && room.seconds <= 0)) {
+            if (!room.isEnabled || room.isMaintenance || (room.status == RoomStatus.FINISHED && room.seconds <= 0)) {
                 return@updateRoom room
             }
             val fixedSeconds = if (room.seconds <= 0) room.defaultMinutes * 60 else room.seconds
@@ -181,7 +195,7 @@ object TimerManager {
     fun tickAll() {
         var changed = false
         rooms.forEachIndexed { index, room ->
-            if (room.isEnabled && room.isRunning && room.seconds > 0) {
+            if (room.isEnabled && !room.isMaintenance && room.isRunning && room.seconds > 0) {
                 val nextSeconds = (room.seconds - 1).coerceAtLeast(0)
                 rooms[index] = room.copy(
                     seconds = nextSeconds,

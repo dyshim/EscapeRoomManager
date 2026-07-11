@@ -53,6 +53,7 @@ fun SettingScreen(
     onBack: () -> Unit,
     onSaveRoom: (roomId: String, name: String, defaultMinutes: Int) -> Unit,
     onSetRoomEnabled: (roomId: String, enabled: Boolean) -> Boolean,
+    onSetMaintenance: (roomId: String, maintenance: Boolean) -> Boolean,
     onDeleteRoom: (roomId: String) -> Boolean,
     onMoveRoom: (roomId: String, direction: Int) -> Boolean,
     onAddRoom: (name: String, defaultMinutes: Int) -> String
@@ -227,6 +228,11 @@ fun SettingScreen(
                             Toast.makeText(context, "진행 중인 방은 비활성화할 수 없습니다.", Toast.LENGTH_SHORT).show()
                         }
                     },
+                    onMaintenanceChange = { maintenance ->
+                        if (!onSetMaintenance(room.id, maintenance)) {
+                            Toast.makeText(context, "진행 중인 방은 유지보수로 전환할 수 없습니다.", Toast.LENGTH_SHORT).show()
+                        }
+                    },
                     onMoveUp = { onMoveRoom(room.id, -1) },
                     onMoveDown = { onMoveRoom(room.id, 1) },
                     onDelete = { roomToDelete = room }
@@ -390,6 +396,7 @@ private fun RoomSettingCard(
     onChoosePreset: () -> Unit,
     onSave: () -> Unit,
     onEnabledChange: (Boolean) -> Unit,
+    onMaintenanceChange: (Boolean) -> Unit,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
     onDelete: () -> Unit
@@ -411,6 +418,23 @@ private fun RoomSettingCard(
                     Text(if (room.isEnabled) "사용 중" else "사용 안 함", color = if (room.isEnabled) Color(0xFF44D17A) else Color(0xFF8D96A0), fontSize = 12.sp)
                 }
                 Switch(checked = room.isEnabled, onCheckedChange = onEnabledChange, enabled = !room.isRunning)
+            }
+
+            Spacer(Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("유지보수 모드", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    Text("손님용 방 선택에서 숨기고 타이머 시작을 막습니다.", color = Color(0xFF9AA3AC), fontSize = 12.sp)
+                }
+                Switch(
+                    checked = room.isMaintenance,
+                    onCheckedChange = onMaintenanceChange,
+                    enabled = room.isEnabled && !room.isRunning
+                )
             }
 
             Spacer(Modifier.height(10.dp))

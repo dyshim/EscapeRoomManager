@@ -17,6 +17,8 @@ object TcpProtocol {
         data class RoomCatalog(val activeRoomIds: Set<String>) : Message
         data class HintUsed(val event: HintUsageEvent) : Message
         data class StartRequest(val roomId: String) : Message
+        data class RegisterDisplay(val roomId: String) : Message
+        data object UnregisterDisplay : Message
         data object Ping : Message
         data object Pong : Message
     }
@@ -47,6 +49,8 @@ object TcpProtocol {
     ).joinToString(SEP)
 
     fun encodeStartRequest(roomId: String): String = listOf(VERSION, "START", encode(roomId)).joinToString(SEP)
+    fun encodeRegisterDisplay(roomId: String): String = listOf(VERSION, "REGISTER", encode(roomId)).joinToString(SEP)
+    fun encodeUnregisterDisplay(): String = "$VERSION${SEP}UNREGISTER"
     fun encodePing(): String = "$VERSION${SEP}PING"
     fun encodePong(): String = "$VERSION${SEP}PONG"
 
@@ -91,6 +95,11 @@ object TcpProtocol {
                 if (fields.size != 3) return null
                 Message.StartRequest(decodeField(fields[2]))
             }
+            "REGISTER" -> {
+                if (fields.size != 3) return null
+                Message.RegisterDisplay(decodeField(fields[2]))
+            }
+            "UNREGISTER" -> Message.UnregisterDisplay
             "PING" -> Message.Ping
             "PONG" -> Message.Pong
             else -> null
