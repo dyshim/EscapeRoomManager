@@ -91,6 +91,8 @@ fun HomeScreen(
         Text("현재 시간", color = Color(0xFFC8D0D7), fontSize = 15.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
         Text(currentTime, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.CenterHorizontally))
         Text("손님용 연결 주소  $localIp:45991", color = Color(0xFF65E38D), fontSize = 14.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
+        Text("PC 웹 주소  http://$localIp:8080", color = Color(0xFF7CC7FF), fontSize = 14.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
+        Text("웹 초기 PIN  1234", color = Color(0xFFC8D0D7), fontSize = 13.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
 
         Spacer(Modifier.height(18.dp))
 

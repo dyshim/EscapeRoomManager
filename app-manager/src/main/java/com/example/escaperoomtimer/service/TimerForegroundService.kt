@@ -12,6 +12,7 @@ import com.example.escaperoomtimer.manager.TimerManager
 import com.example.escaperoomtimer.notification.TimerNotificationHelper
 import com.example.escaperoomtimer.network.ManagerTcpServer
 import com.example.escaperoomtimer.widget.RoomStatusWidgetProvider
+import com.example.escaperoomtimer.web.ManagerWebServer
 
 class TimerForegroundService : Service() {
     private var heartbeatTicks = 0
@@ -38,6 +39,7 @@ class TimerForegroundService : Service() {
         TimerManager.initialize(applicationContext)
         HintProgressManager.start(applicationContext)
         ManagerTcpServer.start()
+        ManagerWebServer.start()
         TimerNotificationHelper.createChannel(this)
         startForeground(
             TimerNotificationHelper.NOTIFICATION_ID,
@@ -55,6 +57,7 @@ class TimerForegroundService : Service() {
         TimerManager.persistNow()
         ManagerGameEndAlarmController.stop()
         ManagerTcpServer.stop()
+        ManagerWebServer.stop()
         HintProgressManager.stop()
         handler.removeCallbacks(ticker)
         super.onDestroy()
