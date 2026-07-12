@@ -10,6 +10,11 @@
   var webAlertsEnabled = localStorage.getItem('webAlertsEnabled') === 'true';
   var autoStopSeconds = Number(localStorage.getItem('webAlarmAutoStopSeconds') || '30');
   var refreshInFlight = false;
+  var socket = null;
+  var reconnectTimer = null;
+  var fallbackTimer = null;
+  var lastStateAt = 0;
+  var installPrompt = null;
 
   var loginOverlay;
   var loginForm;
@@ -17,9 +22,12 @@
   var loginButton;
   var loginError;
   var connection;
+  var connectionDot;
   var roomsElement;
   var alarmBanner;
   var autoStopSelect;
+  var installAppButton;
+  var installHint;
 
   function byId(id){ return document.getElementById(id); }
   function escapeHtml(value){
@@ -27,7 +35,6 @@
       return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character];
     });
   }
-  function escapeJsString(value){ return String(value).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
   function timeText(seconds){
     seconds = Math.max(0, Number(seconds) || 0);
     return String(Math.floor(seconds / 60)).padStart(2,'0') + ':' + String(seconds % 60).padStart(2,'0');
@@ -39,9 +46,14 @@
     if(room.status === 'PAUSED') return '일시정지';
     return '대기';
   }
+  function setConnection(state,message){
+    connection.textContent = message;
+    connectionDot.className = 'connection-dot ' + state;
+  }
   function showLogin(message){
     pin = '';
     localStorage.removeItem('managerPin');
+    disconnectWebSocket();
     loginOverlay.style.display = 'flex';
     loginError.textContent = message || '';
     window.setTimeout(function(){ pinInput.focus(); }, 0);
@@ -71,7 +83,8 @@
       localStorage.setItem('managerPin', pin);
       hideLogin();
       enableAudioOnly();
-      await refresh();
+      connectWebSocket();
+      await refreshFallback();
     }catch(error){
       showLogin(error && error.message ? error.message : '로그인 중 오류가 발생했습니다.');
     }finally{
@@ -158,7 +171,7 @@
     updateAlarmBanner();
     document.title = '🔴 ' + room.name + ' 종료!';
     if(webAlertsEnabled && 'Notification' in window && Notification.permission === 'granted'){
-      try{ new Notification(room.name + ' 게임 종료',{body:'타이머가 00:00이 되었습니다.',tag:'room-end-' + room.id}); }catch(ignore){}
+      try{ new Notification(room.name + ' 게임 종료',{body:'타이머가 00:00이 되었습니다.',tag:'room-end-' + room.id,icon:'/icons/icon-192.png'}); }catch(ignore){}
     }
   }
   function detectNewEndings(rooms){
@@ -185,8 +198,9 @@
       });
       if(response.status === 401){ showLogin('PIN을 다시 입력해 주세요.'); return; }
       if(!response.ok) throw new Error('제어 요청 실패 (' + response.status + ')');
-      window.setTimeout(refresh,100);
-    }catch(error){ connection.textContent = error.message || '제어 요청 중 오류가 발생했습니다.'; }
+      if(socket && socket.readyState === WebSocket.OPEN) socket.send('state');
+      else window.setTimeout(refreshFallback,100);
+    }catch(error){ setConnection('reconnecting',error.message || '제어 요청 중 오류가 발생했습니다.'); }
   }
   function setTime(roomId){
     var minuteInput = byId('m_' + roomId);
@@ -197,7 +211,6 @@
   }
   function card(room){
     var safeId = escapeHtml(room.id);
-    var jsId = escapeJsString(room.id);
     var running = !!room.running;
     var ended = Number(room.seconds) <= 0 && !room.maintenance;
     var html = '<section class="room ' + (ended?'ended':'') + '"><div class="top"><div class="name">' + escapeHtml(room.name) + '</div><div class="badge">' + statusText(room) + '</div></div><div class="time">' + timeText(room.seconds) + '</div><div class="end">종료 예정 ' + escapeHtml(room.endLabel) + '</div>';
@@ -223,22 +236,91 @@
     document.querySelectorAll('.set-time-button').forEach(function(button){ button.addEventListener('click',function(){ setTime(button.dataset.roomId); }); });
     document.querySelectorAll('.room-alarm-button').forEach(function(button){ button.addEventListener('click',function(){ acknowledgeRoom(button.dataset.roomId); }); });
   }
+  function applyState(data){
+    lastStateAt = Date.now();
+    detectNewEndings(data.rooms || []);
+    roomsElement.innerHTML = data.rooms && data.rooms.length ? data.rooms.map(card).join('') : '<div class="empty">사용 중인 방이 없습니다.</div>';
+    attachRoomEvents();
+  }
 
-  async function refresh(){
+  function disconnectWebSocket(){
+    if(reconnectTimer){ clearTimeout(reconnectTimer); reconnectTimer = null; }
+    if(socket){
+      socket.onclose = null;
+      socket.close();
+      socket = null;
+    }
+  }
+  function scheduleReconnect(){
+    if(!pin || reconnectTimer) return;
+    reconnectTimer = window.setTimeout(function(){ reconnectTimer = null; connectWebSocket(); },2000);
+  }
+  function connectWebSocket(){
+    if(!pin) return;
+    disconnectWebSocket();
+    var scheme = location.protocol === 'https:' ? 'wss://' : 'ws://';
+    setConnection('reconnecting','A7 직원용 앱에 실시간 연결 중…');
+    try{
+      socket = new WebSocket(scheme + location.host + '/ws?pin=' + encodeURIComponent(pin));
+      socket.onopen = function(){
+        setConnection('connected','실시간 연결됨 · WebSocket');
+      };
+      socket.onmessage = function(event){
+        try{ applyState(JSON.parse(event.data)); setConnection('connected','실시간 연결됨 · WebSocket'); }
+        catch(error){ setConnection('reconnecting','수신 데이터 오류'); }
+      };
+      socket.onerror = function(){ setConnection('reconnecting','연결 오류 · 재접속 중…'); };
+      socket.onclose = function(){
+        socket = null;
+        setConnection('reconnecting','연결 끊김 · 2초 후 재접속');
+        scheduleReconnect();
+      };
+    }catch(error){
+      socket = null;
+      setConnection('reconnecting','실시간 연결 실패 · HTTP로 임시 연결');
+      scheduleReconnect();
+    }
+  }
+
+  async function refreshFallback(){
     if(!pin || refreshInFlight) return;
+    if(socket && socket.readyState === WebSocket.OPEN && Date.now() - lastStateAt < 6000) return;
     refreshInFlight = true;
     try{
       var response = await fetch('/api/state', {headers:{'X-Manager-Pin':pin},cache:'no-store'});
       if(response.status === 401){ showLogin('PIN을 다시 입력해 주세요.'); return; }
       if(!response.ok) throw new Error('상태 조회 실패 (' + response.status + ')');
-      var data = await response.json();
-      detectNewEndings(data.rooms || []);
-      connection.textContent = 'A7 직원용 앱과 연결됨 · 1초마다 자동 갱신';
-      roomsElement.innerHTML = data.rooms && data.rooms.length ? data.rooms.map(card).join('') : '<div class="empty">사용 중인 방이 없습니다.</div>';
-      attachRoomEvents();
+      applyState(await response.json());
+      if(!socket || socket.readyState !== WebSocket.OPEN) setConnection('reconnecting','HTTP 예비 연결 · WebSocket 재접속 중');
     }catch(error){
-      connection.textContent = '연결 끊김 · ' + (error && error.message ? error.message : 'A7과 같은 Wi-Fi인지 확인하세요.');
+      setConnection('reconnecting','연결 끊김 · ' + (error && error.message ? error.message : 'A7과 같은 Wi-Fi인지 확인하세요.'));
     }finally{ refreshInFlight = false; }
+  }
+
+  function setupPwa(){
+    installAppButton = byId('installAppButton');
+    installHint = byId('installHint');
+    window.addEventListener('beforeinstallprompt',function(event){
+      event.preventDefault();
+      installPrompt = event;
+      installAppButton.hidden = false;
+      installHint.hidden = true;
+    });
+    installAppButton.addEventListener('click',async function(){
+      if(!installPrompt) return;
+      installPrompt.prompt();
+      try{ await installPrompt.userChoice; }catch(ignore){}
+      installPrompt = null;
+      installAppButton.hidden = true;
+    });
+    window.addEventListener('appinstalled',function(){ installAppButton.hidden = true; installHint.hidden = true; });
+
+    if('serviceWorker' in navigator && window.isSecureContext){
+      navigator.serviceWorker.register('/sw.js').catch(function(){});
+    }else if(location.protocol === 'http:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1'){
+      installHint.hidden = false;
+      installHint.textContent = '현재 같은 Wi-Fi의 HTTP 주소에서는 Chrome의 정식 PWA 설치가 제한될 수 있습니다. PC에서는 브라우저 메뉴의 “바로가기 만들기” 또는 “앱으로 설치” 항목을 사용하세요.';
+    }
   }
 
   async function initialize(){
@@ -248,6 +330,7 @@
     loginButton = byId('loginButton');
     loginError = byId('loginError');
     connection = byId('connection');
+    connectionDot = byId('connectionDot');
     roomsElement = byId('rooms');
     alarmBanner = byId('alarmBanner');
     autoStopSelect = byId('autoStopSelect');
@@ -257,17 +340,23 @@
     byId('enableAlertsButton').addEventListener('click',enableWebAlerts);
     byId('stopAllAlarmsButton').addEventListener('click',stopAllWebAlarms);
     autoStopSelect.value = String(autoStopSeconds);
+    setupPwa();
 
     if(pin){
       hideLogin();
-      await refresh();
+      connectWebSocket();
+      await refreshFallback();
       if(!pin) showLogin('저장된 PIN을 다시 확인해 주세요.');
     }else{
       showLogin('');
     }
-    window.setInterval(refresh,1000);
+    fallbackTimer = window.setInterval(refreshFallback,5000);
   }
 
+  window.addEventListener('beforeunload',function(){
+    if(fallbackTimer) clearInterval(fallbackTimer);
+    disconnectWebSocket();
+  });
   window.addEventListener('DOMContentLoaded',function(){
     initialize().catch(function(error){
       var fallback = byId('loginError');

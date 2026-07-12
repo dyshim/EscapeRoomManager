@@ -111,5 +111,6 @@ class TimerForegroundService : Service() {
         )
         RoomStatusWidgetProvider.updateAll(this)
         ManagerTcpServer.broadcastRooms(TimerManager.rooms)
+        ManagerWebServer.broadcastState()
     }
 }
