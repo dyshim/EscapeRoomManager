@@ -21,12 +21,14 @@ import com.example.escaperoomtimer.ui.home.HomeScreen
 import com.example.escaperoomtimer.ui.setting.SettingScreen
 import com.example.escaperoomtimer.ui.timer.TimerScreen
 import com.example.escaperoomtimer.ui.theme.EscapeRoomTimerTheme
+import com.example.escaperoomtimer.web.ManagerWebServer
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         TimerManager.initialize(applicationContext)
         HintProgressManager.start(applicationContext)
+        ManagerWebServer.start(applicationContext)
         requestNotificationPermissionIfNeeded()
         startTimerForegroundService()
 

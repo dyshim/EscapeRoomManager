@@ -40,6 +40,7 @@ import com.example.escaperoomtimer.model.RoomInfo
 import com.example.escaperoomtimer.network.ManagerTcpServer
 import com.example.escaperoomtimer.util.localIpv4Address
 import com.example.escaperoomtimer.util.nowText
+import com.example.escaperoomtimer.web.ManagerWebServer
 import kotlinx.coroutines.delay
 
 @Composable
@@ -54,12 +55,15 @@ fun HomeScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var roomName by remember { mutableStateOf("") }
     var roomMinutes by remember { mutableStateOf("60") }
-    val localIp = remember { localIpv4Address() }
+    var localIp by remember { mutableStateOf(localIpv4Address()) }
+    var webServerStatus by remember { mutableStateOf(ManagerWebServer.statusText()) }
 
     LaunchedEffect(Unit) {
         while (true) {
             delay(1000)
             currentTime = nowText()
+            localIp = localIpv4Address()
+            webServerStatus = ManagerWebServer.statusText()
         }
     }
 
@@ -91,7 +95,14 @@ fun HomeScreen(
         Text("현재 시간", color = Color(0xFFC8D0D7), fontSize = 15.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
         Text(currentTime, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.CenterHorizontally))
         Text("손님용 연결 주소  $localIp:45991", color = Color(0xFF65E38D), fontSize = 14.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
-        Text("PC 웹 주소  http://$localIp:8080", color = Color(0xFF7CC7FF), fontSize = 14.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
+        val webAddress = if (localIp == "IP 확인 불가") "Wi-Fi 연결을 확인하세요" else "http://$localIp:${ManagerWebServer.PORT}"
+        Text("PC 웹 주소  $webAddress", color = Color(0xFF7CC7FF), fontSize = 14.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
+        Text(
+            webServerStatus,
+            color = if (ManagerWebServer.isRunning) Color(0xFF65E38D) else Color(0xFFFFB74D),
+            fontSize = 13.sp,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+        )
         Text("웹 초기 PIN  1234", color = Color(0xFFC8D0D7), fontSize = 13.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
 
         Spacer(Modifier.height(18.dp))

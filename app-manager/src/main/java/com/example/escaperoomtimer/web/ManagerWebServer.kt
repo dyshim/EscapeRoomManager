@@ -1,14 +1,14 @@
 package com.example.escaperoomtimer.web
 
+import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import com.example.escaperoomtimer.manager.TimerManager
 import com.example.escaperoomtimer.model.RoomInfo
 import com.example.escaperoomtimer.model.RoomStatus
 import java.io.BufferedReader
-import java.io.BufferedWriter
 import java.io.InputStreamReader
-import java.io.OutputStreamWriter
+import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketException
@@ -23,18 +23,19 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * A lightweight local web server for the manager dashboard.
- * It intentionally uses only the Java/Android standard library so the A7 has
- * very little extra memory or dependency overhead.
+ * Lightweight local HTTP server used by the manager dashboard.
+ *
+ * The server binds to 0.0.0.0 so another device on the same Wi-Fi can connect.
+ * It retries automatically after temporary bind/network errors and exposes a
+ * small status API for the Android UI.
  */
 object ManagerWebServer {
     const val PORT = 8080
-
-    // Local-network protection for the first release. This can be made
-    // configurable in a later settings commit.
     private const val DEFAULT_PIN = "1234"
+    private const val RETRY_DELAY_MS = 2_000L
 
-    private val running = AtomicBoolean(false)
+    private val desiredRunning = AtomicBoolean(false)
+    private val accepting = AtomicBoolean(false)
     private val mainHandler = Handler(Looper.getMainLooper())
     private val acceptExecutor = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "manager-web-accept").apply { isDaemon = true }
@@ -43,41 +44,74 @@ object ManagerWebServer {
         Thread(runnable, "manager-web-request").apply { isDaemon = true }
     }
 
-    @Volatile
-    private var serverSocket: ServerSocket? = null
+    @Volatile private var serverSocket: ServerSocket? = null
+    @Volatile private var appContext: Context? = null
+    @Volatile private var lastErrorMessage: String? = null
+    @Volatile private var lastStartedAt: Long = 0L
+
+    val isRunning: Boolean
+        get() = desiredRunning.get() && serverSocket?.isBound == true && serverSocket?.isClosed == false
+
+    fun statusText(): String = when {
+        isRunning -> "웹 서버 실행 중 · 포트 $PORT"
+        desiredRunning.get() && !lastErrorMessage.isNullOrBlank() -> "웹 서버 재시도 중 · ${lastErrorMessage}"
+        desiredRunning.get() -> "웹 서버 시작 중…"
+        else -> "웹 서버 중지됨"
+    }
 
     @Synchronized
-    fun start() {
-        if (!running.compareAndSet(false, true)) return
+    fun start(context: Context) {
+        appContext = context.applicationContext
+        desiredRunning.set(true)
+        if (isRunning || !accepting.compareAndSet(false, true)) return
         acceptExecutor.execute(::acceptLoop)
     }
 
     @Synchronized
     fun stop() {
-        running.set(false)
+        desiredRunning.set(false)
         runCatching { serverSocket?.close() }
         serverSocket = null
     }
 
+    fun ensureStarted(context: Context) {
+        appContext = context.applicationContext
+        if (!isRunning) start(context)
+    }
+
     private fun acceptLoop() {
         try {
-            ServerSocket(PORT).use { server ->
-                server.reuseAddress = true
-                serverSocket = server
-                while (running.get()) {
-                    val socket = server.accept().apply {
-                        soTimeout = 5_000
-                        tcpNoDelay = true
+            while (desiredRunning.get()) {
+                try {
+                    val server = ServerSocket()
+                    server.reuseAddress = true
+                    server.bind(InetSocketAddress("0.0.0.0", PORT), 32)
+                    serverSocket = server
+                    lastErrorMessage = null
+                    lastStartedAt = System.currentTimeMillis()
+
+                    while (desiredRunning.get() && !server.isClosed) {
+                        val socket = server.accept().apply {
+                            soTimeout = 8_000
+                            tcpNoDelay = true
+                            keepAlive = true
+                        }
+                        requestExecutor.execute { handle(socket) }
                     }
-                    requestExecutor.execute { handle(socket) }
+                } catch (_: SocketException) {
+                    if (desiredRunning.get()) lastErrorMessage = "포트 $PORT 연결 재시도"
+                } catch (error: Exception) {
+                    lastErrorMessage = error.message ?: error.javaClass.simpleName
+                } finally {
+                    runCatching { serverSocket?.close() }
+                    serverSocket = null
                 }
+
+                if (desiredRunning.get()) Thread.sleep(RETRY_DELAY_MS)
             }
-        } catch (_: SocketException) {
-            // Expected when stopping the service.
-        } catch (_: Exception) {
         } finally {
-            serverSocket = null
-            running.set(false)
+            accepting.set(false)
+            if (desiredRunning.get()) appContext?.let(::start)
         }
     }
 
@@ -85,13 +119,13 @@ object ManagerWebServer {
         socket.use { client ->
             runCatching {
                 val reader = BufferedReader(InputStreamReader(client.getInputStream(), StandardCharsets.UTF_8))
-                val writer = BufferedWriter(OutputStreamWriter(client.getOutputStream(), StandardCharsets.UTF_8))
                 val requestLine = reader.readLine() ?: return
                 val parts = requestLine.split(' ')
                 if (parts.size < 2) return
 
                 val method = parts[0].uppercase(Locale.US)
                 val target = parts[1]
+                val path = target.substringBefore('?')
                 val headers = linkedMapOf<String, String>()
                 while (true) {
                     val line = reader.readLine() ?: break
@@ -115,36 +149,80 @@ object ManagerWebServer {
                     String(chars, 0, offset)
                 } else ""
 
-                when {
-                    method == "GET" && (target == "/" || target.startsWith("/index")) -> {
-                        respond(writer, 200, "text/html; charset=utf-8", dashboardHtml())
-                    }
+                val response = when {
+                    method == "GET" && (path == "/" || path == "/index.html") ->
+                        assetResponse("web/index.html", "text/html; charset=utf-8")
 
-                    method == "GET" && target.startsWith("/api/state") -> {
-                        if (!isAuthorized(headers, target)) {
-                            respond(writer, 401, "application/json; charset=utf-8", "{\"error\":\"unauthorized\"}")
+                    method == "GET" && path == "/style.css" ->
+                        assetResponse("web/style.css", "text/css; charset=utf-8")
+
+                    method == "GET" && path == "/app.js" ->
+                        assetResponse("web/app.js", "application/javascript; charset=utf-8")
+
+                    method == "GET" && path == "/favicon.ico" ->
+                        HttpResponse(204, "image/x-icon", "")
+
+                    method == "GET" && path == "/health" ->
+                        HttpResponse(200, "application/json; charset=utf-8", "{\"ok\":true,\"port\":$PORT,\"startedAt\":$lastStartedAt}")
+
+                    method == "POST" && path == "/api/login" -> {
+                        val submittedPin = parseForm(body)["pin"].orEmpty()
+                        if (submittedPin == DEFAULT_PIN) {
+                            HttpResponse(200, "application/json; charset=utf-8", "{\"ok\":true}")
                         } else {
-                            respond(writer, 200, "application/json; charset=utf-8", stateJson())
+                            HttpResponse(401, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_pin\"}")
                         }
                     }
 
-                    method == "POST" && target.startsWith("/api/action") -> {
+                    method == "GET" && path == "/api/state" -> {
+                        if (!isAuthorized(headers, target)) HttpResponse(401, "application/json; charset=utf-8", "{\"error\":\"unauthorized\"}")
+                        else HttpResponse(200, "application/json; charset=utf-8", stateJson())
+                    }
+
+                    method == "POST" && path == "/api/action" -> {
                         if (!isAuthorized(headers, target)) {
-                            respond(writer, 401, "application/json; charset=utf-8", "{\"error\":\"unauthorized\"}")
+                            HttpResponse(401, "application/json; charset=utf-8", "{\"error\":\"unauthorized\"}")
                         } else {
-                            val params = parseForm(body)
-                            val accepted = dispatchAction(params)
-                            val response = if (accepted) "{\"ok\":true}" else "{\"ok\":false}"
-                            respond(writer, if (accepted) 200 else 400, "application/json; charset=utf-8", response)
+                            val accepted = dispatchAction(parseForm(body))
+                            HttpResponse(if (accepted) 200 else 400, "application/json; charset=utf-8", if (accepted) "{\"ok\":true}" else "{\"ok\":false}")
                         }
                     }
 
-                    else -> respond(writer, 404, "text/plain; charset=utf-8", "Not found")
+                    else -> HttpResponse(404, "text/plain; charset=utf-8", "Not found")
                 }
+                respond(client, response)
+            }.onFailure { error ->
+                lastErrorMessage = error.message ?: error.javaClass.simpleName
             }
         }
     }
 
+    private data class HttpResponse(val status: Int, val contentType: String, val body: String)
+
+    private fun respond(socket: Socket, response: HttpResponse) {
+        val reason = when (response.status) {
+            200 -> "OK"
+            204 -> "No Content"
+            400 -> "Bad Request"
+            401 -> "Unauthorized"
+            404 -> "Not Found"
+            else -> "Error"
+        }
+        val bodyBytes = response.body.toByteArray(StandardCharsets.UTF_8)
+        val header = buildString {
+            append("HTTP/1.1 ${response.status} $reason\r\n")
+            append("Content-Type: ${response.contentType}\r\n")
+            append("Content-Length: ${bodyBytes.size}\r\n")
+            append("Cache-Control: no-store\r\n")
+            append("Access-Control-Allow-Origin: *\r\n")
+            append("Connection: close\r\n\r\n")
+        }.toByteArray(StandardCharsets.US_ASCII)
+        socket.getOutputStream().buffered().use { output ->
+            output.write(header)
+            output.write(bodyBytes)
+            output.flush()
+        }
+    }
     private fun isAuthorized(headers: Map<String, String>, target: String): Boolean {
         val headerPin = headers["x-manager-pin"]
         val queryPin = target.substringAfter('?', "")
@@ -242,93 +320,15 @@ object ManagerWebServer {
         }
     }
 
-    private fun respond(writer: BufferedWriter, status: Int, contentType: String, body: String) {
-        val reason = when (status) {
-            200 -> "OK"
-            400 -> "Bad Request"
-            401 -> "Unauthorized"
-            404 -> "Not Found"
-            else -> "Error"
+    private fun assetResponse(assetPath: String, contentType: String): HttpResponse {
+        val context = appContext
+            ?: return HttpResponse(503, "text/plain; charset=utf-8", "Web server context unavailable")
+        return runCatching {
+            val body = context.assets.open(assetPath).bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
+            HttpResponse(200, contentType, body)
+        }.getOrElse { error ->
+            lastErrorMessage = "Asset load failed: $assetPath (${error.message ?: error.javaClass.simpleName})"
+            HttpResponse(500, "text/plain; charset=utf-8", "Asset load failed")
         }
-        val bytes = body.toByteArray(StandardCharsets.UTF_8)
-        writer.write("HTTP/1.1 $status $reason\r\n")
-        writer.write("Content-Type: $contentType\r\n")
-        writer.write("Content-Length: ${bytes.size}\r\n")
-        writer.write("Cache-Control: no-store\r\n")
-        writer.write("Connection: close\r\n\r\n")
-        writer.flush()
-        clientWriteBytes(writer, bytes)
     }
-
-    // BufferedWriter cannot safely write pre-counted UTF-8 bytes directly. The
-    // page content only uses valid Unicode and the socket stream is UTF-8, so a
-    // String write keeps the Content-Length calculation correct.
-    private fun clientWriteBytes(writer: BufferedWriter, bytes: ByteArray) {
-        writer.write(String(bytes, StandardCharsets.UTF_8))
-        writer.flush()
-    }
-
-    private fun dashboardHtml(): String = """
-        <!doctype html>
-        <html lang="ko">
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width,initial-scale=1">
-          <title>방탈출 운영</title>
-          <style>
-            :root{color-scheme:dark;font-family:system-ui,-apple-system,"Noto Sans KR",sans-serif}
-            *{box-sizing:border-box} body{margin:0;background:#000;color:#fff}
-            header{position:sticky;top:0;background:#0b0f12;border-bottom:1px solid #343b42;padding:16px;z-index:2}
-            h1{font-size:24px;margin:0}.sub{color:#c8d0d7;margin-top:6px;font-size:14px}
-            main{max-width:980px;margin:auto;padding:16px;display:grid;gap:14px}
-            .room{background:#171c20;border:1px solid #30383f;border-radius:14px;padding:16px}
-            .top{display:flex;justify-content:space-between;gap:12px;align-items:center}
-            .name{font-size:22px;font-weight:800}.badge{font-size:14px;padding:6px 10px;border-radius:999px;background:#29323a}
-            .time{font-size:54px;font-weight:900;letter-spacing:1px;margin:12px 0 2px}.end{font-size:17px;color:#e0e6eb;margin-bottom:14px}
-            .controls{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-            button{min-height:48px;border:0;border-radius:10px;background:#263039;color:white;font-size:16px;font-weight:750;cursor:pointer}
-            button.start{background:#126b2d}button.pause{background:#a45b00}button.stop{background:#9b211b}button.adjust{background:#3a2e57}
-            .setrow{display:flex;gap:8px;margin-top:10px}.setrow input{flex:1;min-width:0;background:#0b0f12;border:1px solid #53606b;color:white;border-radius:10px;padding:12px;font-size:17px}
-            .empty{text-align:center;color:#c8d0d7;padding:50px}.error{color:#ff6b6b}
-            #login{position:fixed;inset:0;background:#000e;display:flex;align-items:center;justify-content:center;z-index:5}
-            .loginbox{width:min(360px,90vw);background:#171c20;padding:22px;border-radius:16px}.loginbox input{width:100%;padding:14px;margin:14px 0;background:#090c0e;border:1px solid #58636b;color:#fff;border-radius:10px;font-size:20px}
-            @media(max-width:650px){.controls{grid-template-columns:repeat(2,1fr)}.time{font-size:45px}}
-          </style>
-        </head>
-        <body>
-          <div id="login"><div class="loginbox"><h2>직원용 웹 접속</h2><div class="sub">관리자 PIN을 입력하세요.</div><input id="pinInput" type="password" inputmode="numeric" maxlength="8" placeholder="PIN"><button onclick="login()">접속</button><div id="loginError" class="error"></div></div></div>
-          <header><h1>방탈출 운영</h1><div class="sub" id="connection">연결 확인 중…</div></header>
-          <main id="rooms"><div class="empty">불러오는 중…</div></main>
-          <script>
-            let pin=localStorage.getItem('managerPin')||'';
-            const loginBox=document.getElementById('login');
-            if(pin) loginBox.style.display='none';
-            function login(){pin=document.getElementById('pinInput').value.trim();localStorage.setItem('managerPin',pin);loginBox.style.display='none';refresh();}
-            function esc(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-            function timeText(s){s=Math.max(0,Number(s)||0);return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
-            function statusText(r){if(r.maintenance)return '유지보수';if(r.seconds<=0)return '종료';if(r.running)return r.seconds<=300?'5분 이하':'진행중';if(r.status==='PAUSED')return '일시정지';return '대기';}
-            async function action(roomId,action,seconds){const body=new URLSearchParams({roomId,action});if(seconds!==undefined)body.set('seconds',seconds);const res=await fetch('/api/action',{method:'POST',headers:{'X-Manager-Pin':pin,'Content-Type':'application/x-www-form-urlencoded'},body});if(res.status===401){localStorage.removeItem('managerPin');pin='';loginBox.style.display='flex';document.getElementById('loginError').textContent='PIN을 확인해 주세요.';}setTimeout(refresh,100);}
-            function setTime(id){const m=Number(document.getElementById('m_'+id).value)||0;const s=Math.min(59,Number(document.getElementById('s_'+id).value)||0);action(id,'set',Math.max(0,m*60+s));}
-            function card(r){
-              const id=esc(r.id), running=r.running;
-              let html='<section class="room"><div class="top"><div class="name">'+esc(r.name)+'</div><div class="badge">'+statusText(r)+'</div></div><div class="time">'+timeText(r.seconds)+'</div><div class="end">종료 예정 '+esc(r.endLabel)+'</div>';
-              if(r.maintenance){html+='<div class="error">유지보수 중인 방입니다.</div>';}
-              else{
-                html+='<div class="controls">'
-                  +'<button class="start" onclick="action(\''+id+'\',\''+(running?'pause':'start')+'\')">'+(running?'일시정지':'시작')+'</button>'
-                  +'<button class="stop" onclick="action(\''+id+'\',\'stop\')">종료</button>'
-                  +'<button class="adjust" onclick="action(\''+id+'\',\'adjust\',300)">+5분</button>'
-                  +'<button class="adjust" onclick="action(\''+id+'\',\'adjust\',-300)">-5분</button>'
-                  +'<button onclick="action(\''+id+'\',\'adjust\',10)">+10초</button>'
-                  +'<button onclick="action(\''+id+'\',\'adjust\',-10)">-10초</button>'
-                  +'<button onclick="action(\''+id+'\',\'reset\')">초기화</button></div>'
-                  +'<div class="setrow"><input id="m_'+id+'" inputmode="numeric" placeholder="분"><input id="s_'+id+'" inputmode="numeric" placeholder="초"><button onclick="setTime(\''+id+'\')">시간 적용</button></div>';
-              }
-              return html+'</section>';
-            }
-            async function refresh(){if(!pin)return;try{const res=await fetch('/api/state',{headers:{'X-Manager-Pin':pin},cache:'no-store'});if(res.status===401){localStorage.removeItem('managerPin');pin='';loginBox.style.display='flex';return;}const data=await res.json();document.getElementById('connection').textContent='A7 직원용 앱과 연결됨 · 1초마다 자동 갱신';document.getElementById('rooms').innerHTML=data.rooms.length?data.rooms.map(card).join(''):'<div class="empty">사용 중인 방이 없습니다.</div>';}catch(e){document.getElementById('connection').textContent='연결 끊김 · A7과 같은 Wi-Fi인지 확인하세요.';}}
-            refresh();setInterval(refresh,1000);
-          </script>
-        </body></html>
-    """.trimIndent()
 }

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>방탈출 운영</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="loginOverlay" class="overlay">
+    <form id="loginForm" class="loginbox" novalidate>
+      <h2>직원용 웹 접속</h2>
+      <p class="sub">관리자 PIN을 입력하세요.</p>
+      <label class="sr-only" for="pinInput">관리자 PIN</label>
+      <input id="pinInput" name="pin" type="password" inputmode="numeric" maxlength="8" placeholder="PIN" autocomplete="current-password">
+      <button id="loginButton" type="submit">접속</button>
+      <p id="loginError" class="error" role="alert" aria-live="polite"></p>
+    </form>
+  </div>
+
+  <header>
+    <h1>방탈출 운영</h1>
+    <div class="sub" id="connection">연결 확인 중…</div>
+    <div class="toolbar">
+      <label>웹 알람 자동 정지
+        <select id="autoStopSelect">
+          <option value="5">5초</option>
+          <option value="10">10초</option>
+          <option value="15">15초</option>
+          <option value="20">20초</option>
+          <option value="30">30초</option>
+          <option value="45">45초</option>
+          <option value="60">60초</option>
+          <option value="0">자동 정지 안 함</option>
+        </select>
+      </label>
+      <button id="enableAlertsButton" type="button">🔔 웹 알림·소리 사용</button>
+      <button id="stopAllAlarmsButton" type="button">알람 모두 끄기</button>
+    </div>
+  </header>
+
+  <div id="alarmBanner" class="alarm-banner" aria-live="assertive"></div>
+  <main id="rooms"><div class="empty">불러오는 중…</div></main>
+
+  <noscript>이 웹 화면을 사용하려면 JavaScript를 켜야 합니다.</noscript>
+  <script src="/app.js" defer></script>
+</body>
+</html>
