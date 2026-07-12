@@ -40,11 +40,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.escaperoomtimer.model.RoomInfo
 import com.example.escaperoomtimer.model.ThemePreset
 import com.example.escaperoomtimer.repository.ThemePresetRepository
+import com.example.escaperoomtimer.settings.WebAdminPinPreferences
 import java.util.UUID
 
 @Composable
@@ -118,6 +120,7 @@ fun SettingScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item { ManagerAlarmSettingsSection() }
+            item { WebAdminPinSettingsSection() }
 
             item {
                 Text("테마 프리셋", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
@@ -469,5 +472,112 @@ private fun RoomSettingCard(
                 }
             }
         }
+    }
+}
+
+
+@Composable
+private fun WebAdminPinSettingsSection() {
+    val context = LocalContext.current
+    var currentPin by remember { mutableStateOf("") }
+    var newPin by remember { mutableStateOf("") }
+    var confirmPin by remember { mutableStateOf("") }
+    var showResetDialog by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF171C20)),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text("웹 관리자 PIN", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+            Text(
+                "PC 웹 로그인에 사용하는 숫자 PIN입니다. 최초 PIN은 1234입니다.",
+                color = Color(0xFFB8C0C8),
+                fontSize = 13.sp
+            )
+
+            OutlinedTextField(
+                value = currentPin,
+                onValueChange = { currentPin = it.filter(Char::isDigit).take(8) },
+                label = { Text("현재 PIN") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
+                value = newPin,
+                onValueChange = { newPin = it.filter(Char::isDigit).take(8) },
+                label = { Text("새 PIN (4~8자리)") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
+                value = confirmPin,
+                onValueChange = { confirmPin = it.filter(Char::isDigit).take(8) },
+                label = { Text("새 PIN 확인") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = {
+                        when {
+                            !WebAdminPinPreferences.isValidPin(newPin) ->
+                                Toast.makeText(context, "새 PIN은 숫자 4~8자리로 입력해 주세요.", Toast.LENGTH_SHORT).show()
+                            newPin != confirmPin ->
+                                Toast.makeText(context, "새 PIN 확인이 일치하지 않습니다.", Toast.LENGTH_SHORT).show()
+                            WebAdminPinPreferences.changePin(context, currentPin, newPin) -> {
+                                currentPin = ""
+                                newPin = ""
+                                confirmPin = ""
+                                Toast.makeText(context, "웹 관리자 PIN을 변경했습니다.", Toast.LENGTH_SHORT).show()
+                            }
+                            else -> Toast.makeText(context, "현재 PIN이 올바르지 않습니다.", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
+                ) { Text("PIN 변경") }
+
+                OutlinedButton(
+                    onClick = { showResetDialog = true },
+                    modifier = Modifier.weight(1f)
+                ) { Text("1234로 초기화") }
+            }
+        }
+    }
+
+    if (showResetDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetDialog = false },
+            title = { Text("웹 PIN 초기화") },
+            text = { Text("웹 관리자 PIN을 1234로 초기화할까요?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    WebAdminPinPreferences.resetToDefault(context)
+                    currentPin = ""
+                    newPin = ""
+                    confirmPin = ""
+                    showResetDialog = false
+                    Toast.makeText(context, "웹 관리자 PIN을 1234로 초기화했습니다.", Toast.LENGTH_SHORT).show()
+                }) { Text("초기화", color = Color(0xFFFF7A00)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetDialog = false }) { Text("취소") }
+            }
+        )
     }
 }

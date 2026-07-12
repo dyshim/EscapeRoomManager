@@ -7,6 +7,7 @@ import android.util.Base64
 import com.example.escaperoomtimer.manager.TimerManager
 import com.example.escaperoomtimer.model.RoomInfo
 import com.example.escaperoomtimer.model.RoomStatus
+import com.example.escaperoomtimer.settings.WebAdminPinPreferences
 import java.io.BufferedInputStream
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -35,7 +36,6 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 object ManagerWebServer {
     const val PORT = 8080
-    private const val DEFAULT_PIN = "1234"
     private const val RETRY_DELAY_MS = 2_000L
     private const val WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
@@ -49,6 +49,9 @@ object ManagerWebServer {
         Thread(runnable, "manager-web-request").apply { isDaemon = true }
     }
     private val webSocketClients = ConcurrentHashMap.newKeySet<WebSocketClient>()
+    private val loginAttempts = ConcurrentHashMap<String, LoginAttempt>()
+    private const val MAX_LOGIN_FAILURES = 5
+    private const val LOGIN_LOCK_MS = 30_000L
 
     @Volatile private var serverSocket: ServerSocket? = null
     @Volatile private var appContext: Context? = null
@@ -68,6 +71,7 @@ object ManagerWebServer {
     @Synchronized
     fun start(context: Context) {
         appContext = context.applicationContext
+        WebAdminPinPreferences.ensureInitialized(context)
         desiredRunning.set(true)
         if (isRunning || !accepting.compareAndSet(false, true)) return
         acceptExecutor.execute(::acceptLoop)
@@ -214,11 +218,35 @@ object ManagerWebServer {
                     )
 
                 method == "POST" && path == "/api/login" -> {
-                    val submittedPin = parseForm(body)["pin"].orEmpty()
-                    if (submittedPin == DEFAULT_PIN) {
-                        HttpResponse(200, "application/json; charset=utf-8", "{\"ok\":true}")
+                    val clientKey = socket.inetAddress?.hostAddress ?: "unknown"
+                    val now = System.currentTimeMillis()
+                    val attempt = loginAttempts[clientKey]
+                    if (attempt != null && attempt.lockedUntil > now) {
+                        val retryAfter = ((attempt.lockedUntil - now + 999L) / 1000L).coerceAtLeast(1L)
+                        HttpResponse(
+                            429,
+                            "application/json; charset=utf-8",
+                            "{\"ok\":false,\"error\":\"locked\",\"retryAfter\":$retryAfter}"
+                        )
                     } else {
-                        HttpResponse(401, "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"invalid_pin\"}")
+                        val submittedPin = parseForm(body)["pin"].orEmpty()
+                        val context = appContext
+                        if (context != null && WebAdminPinPreferences.verify(context, submittedPin)) {
+                            loginAttempts.remove(clientKey)
+                            HttpResponse(200, "application/json; charset=utf-8", "{\"ok\":true}")
+                        } else {
+                            val failures = (attempt?.failures ?: 0) + 1
+                            val lockedUntil = if (failures >= MAX_LOGIN_FAILURES) now + LOGIN_LOCK_MS else 0L
+                            loginAttempts[clientKey] = LoginAttempt(
+                                failures = if (lockedUntil > 0L) 0 else failures,
+                                lockedUntil = lockedUntil
+                            )
+                            HttpResponse(
+                                401,
+                                "application/json; charset=utf-8",
+                                "{\"ok\":false,\"error\":\"invalid_pin\",\"remaining\":${(MAX_LOGIN_FAILURES - failures).coerceAtLeast(0)}}"
+                            )
+                        }
                     }
                 }
 
@@ -391,6 +419,11 @@ object ManagerWebServer {
         fun close() = runCatching { socket.close() }.getOrNull()
     }
 
+    private data class LoginAttempt(
+        val failures: Int,
+        val lockedUntil: Long
+    )
+
     private data class HttpResponse(
         val status: Int,
         val contentType: String,
@@ -410,6 +443,7 @@ object ManagerWebServer {
             400 -> "Bad Request"
             401 -> "Unauthorized"
             404 -> "Not Found"
+            429 -> "Too Many Requests"
             500 -> "Internal Server Error"
             503 -> "Service Unavailable"
             else -> "Error"
@@ -439,7 +473,9 @@ object ManagerWebServer {
             }
             .firstOrNull { it.first == "pin" }
             ?.second
-        return headerPin == DEFAULT_PIN || queryPin == DEFAULT_PIN
+        val context = appContext ?: return false
+        return WebAdminPinPreferences.verify(context, headerPin.orEmpty()) ||
+            WebAdminPinPreferences.verify(context, queryPin.orEmpty())
     }
 
     private fun dispatchAction(params: Map<String, String>): Boolean {

@@ -75,7 +75,16 @@
         cache:'no-store'
       });
       if(!response.ok){
-        throw new Error(response.status === 401 ? 'PIN이 올바르지 않습니다.' : '로그인 요청에 실패했습니다. (' + response.status + ')');
+        var errorBody = {};
+        try{ errorBody = await response.json(); }catch(ignore){}
+        if(response.status === 429){
+          throw new Error('로그인 시도가 잠겼습니다. ' + (errorBody.retryAfter || 30) + '초 후 다시 시도해 주세요.');
+        }
+        if(response.status === 401){
+          var remaining = Number(errorBody.remaining);
+          throw new Error('PIN이 올바르지 않습니다.' + (Number.isFinite(remaining) ? ' 남은 시도 ' + remaining + '회' : ''));
+        }
+        throw new Error('로그인 요청에 실패했습니다. (' + response.status + ')');
       }
       var result = await response.json();
       if(!result.ok) throw new Error('로그인 응답이 올바르지 않습니다.');
