@@ -15,8 +15,8 @@ android {
         applicationId = "com.example.escaperoomtimer"
         minSdk = 23
         targetSdk = 36
-        versionCode = 28
-        versionName = "0.28.0"
+        versionCode = 32
+        versionName = "1.0.0-rc1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
