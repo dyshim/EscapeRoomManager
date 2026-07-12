@@ -54,6 +54,9 @@ import com.example.escaperoomdisplay.util.openHintApp
 import com.example.escaperoomshared.model.SharedRoomState
 import kotlinx.coroutines.delay
 
+private const val ADMIN_TITLE_TAP_REQUIRED_COUNT = 10
+private const val ADMIN_TITLE_TAP_TIMEOUT_MILLIS = 5_000L
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -388,14 +391,14 @@ private fun GuestDisplayScreen(
             fontWeight = FontWeight.Bold,
             modifier = Modifier.clickable {
                 val tappedAt = System.currentTimeMillis()
-                if (firstTitleTapAt == 0L || tappedAt - firstTitleTapAt > 3_000L) {
+                if (firstTitleTapAt == 0L || tappedAt - firstTitleTapAt > ADMIN_TITLE_TAP_TIMEOUT_MILLIS) {
                     firstTitleTapAt = tappedAt
                     titleTapCount = 1
                 } else {
                     titleTapCount += 1
                 }
 
-                if (titleTapCount >= 5) {
+                if (titleTapCount >= ADMIN_TITLE_TAP_REQUIRED_COUNT) {
                     titleTapCount = 0
                     firstTitleTapAt = 0L
                     showPinDialog = true
