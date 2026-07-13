@@ -93,6 +93,24 @@ object ManagerTcpServer {
         clients.toList().forEach { client -> sendLines(client, lines) }
     }
 
+    private fun broadcastRoom(roomId: String) {
+        if (!running.get()) return
+        val room = TimerManager.getRoom(roomId) ?: return
+        if (!room.isEnabled || room.isMaintenance || !room.guestScreenEnabled) return
+
+        val line = TcpProtocol.encodeRoom(
+            SharedRoomState(
+                id = room.id,
+                name = room.name,
+                seconds = room.seconds,
+                status = room.status.name,
+                isRunning = room.isRunning,
+                updatedAtMillis = System.currentTimeMillis()
+            )
+        )
+        clients.toList().forEach { connectedClient -> sendLine(connectedClient, line) }
+    }
+
     private fun acceptLoop() {
         try {
             ServerSocket(TcpProtocol.PORT).use { server ->
@@ -135,8 +153,11 @@ object ManagerTcpServer {
                     when (val message = TcpProtocol.decode(line)) {
                         is TcpProtocol.Message.HintUsed -> HintProgressManager.recordHintUsage(message.event)
                         is TcpProtocol.Message.StartRequest -> {
-                            TimerManager.start(message.roomId)
-                            broadcastRooms(TimerManager.rooms)
+                            mainHandler.post {
+                                TimerManager.start(message.roomId)
+                                sendLine(client, TcpProtocol.encodeStartAccepted(message.roomId))
+                                broadcastRoom(message.roomId)
+                            }
                         }
                         is TcpProtocol.Message.RegisterDisplay -> {
                             client.roomId = message.roomId

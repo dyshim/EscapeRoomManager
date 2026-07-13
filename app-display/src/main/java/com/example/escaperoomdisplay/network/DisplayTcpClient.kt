@@ -10,6 +10,7 @@ import java.io.OutputStreamWriter
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 class DisplayTcpClient(
     private val onRoomReceived: (SharedRoomState) -> Unit,
@@ -17,6 +18,7 @@ class DisplayTcpClient(
     private val onConnectionChanged: (Boolean) -> Unit
 ) {
     private val running = AtomicBoolean(false)
+    private val pendingStartRoomId = AtomicReference<String?>(null)
     private val sendLock = Any()
 
     @Volatile private var host: String = ""
@@ -37,6 +39,7 @@ class DisplayTcpClient(
 
     fun disconnect() {
         running.set(false)
+        pendingStartRoomId.set(null)
         closeSocket()
         worker = null
         onConnectionChanged(false)
@@ -51,7 +54,12 @@ class DisplayTcpClient(
         }
     }
 
-    fun sendStartRequest(roomId: String): Boolean = roomId.isNotBlank() && sendRawChecked(TcpProtocol.encodeStartRequest(roomId))
+    fun sendStartRequest(roomId: String): Boolean {
+        if (roomId.isBlank() || !running.get()) return false
+        pendingStartRoomId.set(roomId)
+        sendPendingStartIfPossible()
+        return true
+    }
     fun sendHint(event: HintUsageEvent): Boolean = sendRawChecked(TcpProtocol.encodeHint(event))
 
     private fun connectionLoop() {
@@ -65,12 +73,16 @@ class DisplayTcpClient(
                     writer = BufferedWriter(OutputStreamWriter(connectedSocket.getOutputStream()))
                     onConnectionChanged(true)
                     if (registeredRoomId.isNotBlank()) sendRaw(TcpProtocol.encodeRegisterDisplay(registeredRoomId))
+                    sendPendingStartIfPossible()
 
                     BufferedReader(InputStreamReader(connectedSocket.getInputStream())).useLines { lines ->
                         lines.forEach { line ->
                             when (val message = TcpProtocol.decode(line)) {
                                 is TcpProtocol.Message.RoomState -> onRoomReceived(message.room)
                                 is TcpProtocol.Message.RoomCatalog -> onRoomCatalogReceived(message.activeRoomIds)
+                                is TcpProtocol.Message.StartAccepted -> {
+                                    pendingStartRoomId.compareAndSet(message.roomId, null)
+                                }
                                 TcpProtocol.Message.Ping -> sendRaw(TcpProtocol.encodePong())
                                 else -> Unit
                             }
@@ -84,6 +96,13 @@ class DisplayTcpClient(
                 onConnectionChanged(false)
             }
             if (running.get()) try { Thread.sleep(2_000L) } catch (_: InterruptedException) { Thread.currentThread().interrupt() }
+        }
+    }
+
+    private fun sendPendingStartIfPossible() {
+        val roomId = pendingStartRoomId.get() ?: return
+        if (!sendRawChecked(TcpProtocol.encodeStartRequest(roomId))) {
+            closeSocket()
         }
     }
 
