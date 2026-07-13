@@ -12,6 +12,7 @@ import com.example.escaperoomdisplay.widget.DisplayRoomWidgetProvider
 import com.example.escaperoomdisplay.widget.DisplayWidgetStateRepository
 
 object DisplaySyncManager {
+    private const val VISIBLE_DISCONNECT_DELAY_MILLIS = 6_000L
     private const val PREFS_NAME = "display_sync_preferences"
     private const val KEY_SELECTED_ROOM_ID = "selected_room_id"
     private const val KEY_SERVER_HOST = "server_host"
@@ -43,17 +44,13 @@ object DisplaySyncManager {
     private var appContext: Context? = null
     private var debugTickRunnable: Runnable? = null
     private var lastConnectionPulsePublishedAt = 0L
+    private var transportConnected = false
+    private var delayedDisconnectRunnable: Runnable? = null
 
     private val tcpClient = DisplayTcpClient(
         onRoomReceived = ::updateRoom,
         onRoomCatalogReceived = ::applyRoomCatalog,
-        onConnectionChanged = { connected ->
-            mainHandler.post {
-                _isConnected.value = connected
-                if (connected && _debugDemoActive.value) stopDebugDemo()
-                persistWidgetState()
-            }
-        }
+        onConnectionChanged = ::handleTransportConnectionChanged
     )
 
     @Synchronized
@@ -74,6 +71,10 @@ object DisplaySyncManager {
     fun stop() {
         stopDebugDemo()
         DisplayGameEndAlarmController.stop()
+        delayedDisconnectRunnable?.let(mainHandler::removeCallbacks)
+        delayedDisconnectRunnable = null
+        transportConnected = false
+        setVisibleConnection(false)
         tcpClient.disconnect()
         appContext = null
     }
@@ -88,7 +89,10 @@ object DisplaySyncManager {
 
         mainHandler.post {
             _serverHost.value = normalized
-            _isConnected.value = false
+            delayedDisconnectRunnable?.let(mainHandler::removeCallbacks)
+            delayedDisconnectRunnable = null
+            transportConnected = false
+            setVisibleConnection(false)
             roomsById.clear()
             _rooms.value = emptyList()
             _selectedRoom.value = null
@@ -163,6 +167,42 @@ object DisplaySyncManager {
                 usedAtMillis = System.currentTimeMillis()
             )
         )
+    }
+
+    private fun handleTransportConnectionChanged(connected: Boolean) {
+        mainHandler.post {
+            transportConnected = connected
+            if (connected) {
+                delayedDisconnectRunnable?.let(mainHandler::removeCallbacks)
+                delayedDisconnectRunnable = null
+                setVisibleConnection(true)
+                if (_debugDemoActive.value) stopDebugDemo()
+            } else if (delayedDisconnectRunnable == null) {
+                val runnable = Runnable {
+                    delayedDisconnectRunnable = null
+                    if (!transportConnected) setVisibleConnection(false)
+                }
+                delayedDisconnectRunnable = runnable
+                mainHandler.postDelayed(runnable, VISIBLE_DISCONNECT_DELAY_MILLIS)
+            }
+        }
+    }
+
+    private fun markConnectionAlive() {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            transportConnected = true
+            delayedDisconnectRunnable?.let(mainHandler::removeCallbacks)
+            delayedDisconnectRunnable = null
+            setVisibleConnection(true)
+        } else {
+            mainHandler.post(::markConnectionAlive)
+        }
+    }
+
+    private fun setVisibleConnection(connected: Boolean) {
+        if (_isConnected.value == connected) return
+        _isConnected.value = connected
+        persistWidgetState()
     }
 
     fun startDebugDemo() {
@@ -276,6 +316,7 @@ object DisplaySyncManager {
     }
 
     private fun publishConnectionPulse(receivedAt: Long) {
+        markConnectionAlive()
         if (receivedAt - lastConnectionPulsePublishedAt < 3_000L) return
         lastConnectionPulsePublishedAt = receivedAt
         if (Looper.myLooper() == Looper.getMainLooper()) {

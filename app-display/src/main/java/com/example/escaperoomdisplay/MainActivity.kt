@@ -7,6 +7,7 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
@@ -36,8 +38,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -52,7 +58,6 @@ import com.example.escaperoomdisplay.settings.DisplayAlarmSettingsDialog
 import com.example.escaperoomdisplay.ui.theme.EscapeRoomTimerTheme
 import com.example.escaperoomdisplay.util.openHintApp
 import com.example.escaperoomshared.model.SharedRoomState
-import kotlinx.coroutines.delay
 
 private const val ADMIN_TITLE_TAP_REQUIRED_COUNT = 10
 private const val ADMIN_TITLE_TAP_TIMEOUT_MILLIS = 5_000L
@@ -82,7 +87,6 @@ private fun DisplayApp() {
     val rooms by DisplaySyncManager.rooms
     val selectedRoomId by DisplaySyncManager.selectedRoomId
     val selectedRoom by DisplaySyncManager.selectedRoom
-    val lastReceivedAt by DisplaySyncManager.lastReceivedAtMillis
     val debugDemoActive by DisplaySyncManager.debugDemoActive
     val serverHost by DisplaySyncManager.serverHost
     val tcpConnected by DisplaySyncManager.isConnected
@@ -90,7 +94,6 @@ private fun DisplayApp() {
     if (selectedRoomId == null) {
         RoomSelectionScreen(
             rooms = rooms,
-            lastReceivedAtMillis = lastReceivedAt,
             debugDemoActive = debugDemoActive,
             serverHost = serverHost,
             tcpConnected = tcpConnected,
@@ -103,7 +106,7 @@ private fun DisplayApp() {
     } else {
         GuestDisplayScreen(
             room = selectedRoom,
-            lastReceivedAtMillis = lastReceivedAt,
+            tcpConnected = tcpConnected,
             debugDemoActive = debugDemoActive,
             onStartRoom = DisplaySyncManager::requestStart,
             onChangeRoom = { DisplaySyncManager.clearSelectedRoom(context) },
@@ -118,7 +121,6 @@ private fun DisplayApp() {
 @Composable
 private fun RoomSelectionScreen(
     rooms: List<SharedRoomState>,
-    lastReceivedAtMillis: Long,
     debugDemoActive: Boolean,
     serverHost: String,
     tcpConnected: Boolean,
@@ -131,15 +133,6 @@ private fun RoomSelectionScreen(
     val context = LocalContext.current
     val showDebugTools = isDebugBuild(context)
     var hostInput by remember(serverHost) { mutableStateOf(serverHost) }
-    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(1000L)
-            now = System.currentTimeMillis()
-        }
-    }
-
-    val isConnected = lastReceivedAtMillis > 0L && now - lastReceivedAtMillis <= 5_000L
 
     Column(
         modifier = Modifier
@@ -157,18 +150,11 @@ private fun RoomSelectionScreen(
 
         Spacer(Modifier.height(8.dp))
 
-        Text(
-            text = when {
-                debugDemoActive -> "디버그 테스트 모드"
-                tcpConnected && isConnected -> "직원용 앱 연결됨"
-                else -> "직원용 앱을 기다리는 중"
-            },
-            color = when {
-                debugDemoActive -> Color(0xFF9C6ADE)
-                tcpConnected && isConnected -> Color(0xFF44D17A)
-                else -> Color(0xFFFFB000)
-            },
-            fontSize = 17.sp
+        ConnectionStatusIndicator(
+            connected = tcpConnected,
+            label = if (tcpConnected) "직원용 앱 연결됨" else "직원용 앱을 기다리는 중",
+            debugMode = debugDemoActive,
+            fontSize = 17
         )
 
         Spacer(Modifier.height(20.dp))
@@ -272,6 +258,71 @@ private fun RoomSelectionScreen(
 }
 
 @Composable
+private fun ConnectionStatusIndicator(
+    connected: Boolean,
+    label: String,
+    debugMode: Boolean = false,
+    fontSize: Int = 18
+) {
+    val statusColor = when {
+        debugMode -> Color(0xFF9C6ADE)
+        connected -> Color(0xFF44D17A)
+        else -> Color(0xFFFF4B4B)
+    }
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(9.dp)
+    ) {
+        Canvas(modifier = Modifier.size(26.dp)) {
+            val strokeWidth = 2.6.dp.toPx()
+            val stroke = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+
+            drawArc(
+                color = statusColor,
+                startAngle = 215f,
+                sweepAngle = 110f,
+                useCenter = false,
+                topLeft = Offset(size.width * 0.08f, size.height * 0.08f),
+                size = Size(size.width * 0.84f, size.height * 0.84f),
+                style = stroke
+            )
+            drawArc(
+                color = statusColor,
+                startAngle = 215f,
+                sweepAngle = 110f,
+                useCenter = false,
+                topLeft = Offset(size.width * 0.25f, size.height * 0.30f),
+                size = Size(size.width * 0.50f, size.height * 0.50f),
+                style = stroke
+            )
+            drawCircle(
+                color = statusColor,
+                radius = size.minDimension * 0.075f,
+                center = Offset(size.width / 2f, size.height * 0.82f)
+            )
+
+            if (!connected && !debugMode) {
+                drawLine(
+                    color = statusColor,
+                    start = Offset(size.width * 0.18f, size.height * 0.16f),
+                    end = Offset(size.width * 0.84f, size.height * 0.86f),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+            }
+        }
+
+        Text(
+            text = if (debugMode) "디버그 테스트 모드" else label,
+            color = statusColor,
+            fontSize = fontSize.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
 private fun RoomSelectionCard(room: SharedRoomState, onClick: () -> Unit) {
     Card(
         modifier = Modifier
@@ -314,7 +365,7 @@ private fun RoomSelectionCard(room: SharedRoomState, onClick: () -> Unit) {
 @Composable
 private fun GuestDisplayScreen(
     room: SharedRoomState?,
-    lastReceivedAtMillis: Long,
+    tcpConnected: Boolean,
     debugDemoActive: Boolean,
     onStartRoom: (String) -> Boolean,
     onChangeRoom: () -> Unit,
@@ -323,7 +374,6 @@ private fun GuestDisplayScreen(
     val context = LocalContext.current
     val showDebugTools = isDebugBuild(context)
     val alarmActive by DisplayGameEndAlarmController.isActive
-    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var startRequestPending by remember(room?.id) { mutableStateOf(false) }
     var titleTapCount by remember { mutableStateOf(0) }
     var firstTitleTapAt by remember { mutableLongStateOf(0L) }
@@ -331,13 +381,6 @@ private fun GuestDisplayScreen(
     var showAdminMenu by remember { mutableStateOf(false) }
     var showPinChangeDialog by remember { mutableStateOf(false) }
     var showAlarmSettingsDialog by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(1000L)
-            now = System.currentTimeMillis()
-        }
-    }
 
     LaunchedEffect(room?.isRunning) {
         if (room?.isRunning == true) startRequestPending = false
@@ -347,8 +390,7 @@ private fun GuestDisplayScreen(
         // Prevent guests from leaving the display screen accidentally.
     }
 
-    val isConnected = debugDemoActive ||
-        (lastReceivedAtMillis > 0L && now - lastReceivedAtMillis <= 5_000L)
+    val isConnected = debugDemoActive || tcpConnected
     val roomName = room?.name ?: "선택한 방을 기다리는 중"
     val isGameFinished = room != null && room.seconds <= 0 && !room.isRunning
     val showStartButton = room != null && !room.isRunning && !isGameFinished
@@ -367,19 +409,11 @@ private fun GuestDisplayScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text(
-            text = when {
-                debugDemoActive -> "디버그 테스트 모드"
-                isConnected -> "직원용 앱 연결됨"
-                else -> "연결 끊김"
-            },
-            color = when {
-                debugDemoActive -> Color(0xFF9C6ADE)
-                isConnected -> Color(0xFF44D17A)
-                else -> Color(0xFFFF4B4B)
-            },
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold
+        ConnectionStatusIndicator(
+            connected = isConnected,
+            label = if (isConnected) "직원용 앱 연결됨" else "연결 끊김",
+            debugMode = debugDemoActive,
+            fontSize = 18
         )
 
         Spacer(Modifier.height(28.dp))

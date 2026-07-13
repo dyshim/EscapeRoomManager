@@ -18,6 +18,9 @@
   var renderedRoomModes = {};
   var lastConnectionState = '';
   var lastConnectionMessage = '';
+  var connectionLostTimer = null;
+  var lastConnectionSuccessAt = 0;
+  var hasConnectedOnce = false;
 
   var loginOverlay;
   var loginForm;
@@ -25,7 +28,7 @@
   var loginButton;
   var loginError;
   var connection;
-  var connectionDot;
+  var connectionIcon;
   var roomsElement;
   var alarmBanner;
   var autoStopSelect;
@@ -54,7 +57,22 @@
     lastConnectionState = state;
     lastConnectionMessage = message;
     connection.textContent = message;
-    connectionDot.className = 'connection-dot ' + state;
+    connectionIcon.className = 'connection-icon ' + state;
+  }
+  function markConnectionAlive(){
+    lastConnectionSuccessAt = Date.now();
+    hasConnectedOnce = true;
+    if(connectionLostTimer){ clearTimeout(connectionLostTimer); connectionLostTimer = null; }
+    setConnection('connected','실시간 연결됨');
+  }
+  function scheduleVisibleDisconnect(){
+    if(connectionLostTimer) return;
+    connectionLostTimer = window.setTimeout(function(){
+      connectionLostTimer = null;
+      if(Date.now() - lastConnectionSuccessAt >= 6000){
+        setConnection('disconnected','연결 끊김');
+      }
+    },6000);
   }
   function showLogin(message){
     pin = '';
@@ -215,7 +233,7 @@
       if(!response.ok) throw new Error('제어 요청 실패 (' + response.status + ')');
       if(socket && socket.readyState === WebSocket.OPEN) socket.send('state');
       else window.setTimeout(refreshFallback,100);
-    }catch(error){ setConnection('reconnecting',error.message || '제어 요청 중 오류가 발생했습니다.'); }
+    }catch(error){ scheduleVisibleDisconnect(); }
   }
   function setTime(roomId){
     var minuteInput = byId('m_' + roomId);
@@ -314,25 +332,25 @@
     if(!pin) return;
     disconnectWebSocket();
     var scheme = location.protocol === 'https:' ? 'wss://' : 'ws://';
-    setConnection('reconnecting','A7 직원용 앱에 실시간 연결 중…');
+    if(!hasConnectedOnce) setConnection('connecting','연결 확인 중…');
     try{
       socket = new WebSocket(scheme + location.host + '/ws?pin=' + encodeURIComponent(pin));
       socket.onopen = function(){
-        setConnection('connected','실시간 연결됨 · WebSocket');
+        markConnectionAlive();
       };
       socket.onmessage = function(event){
-        try{ applyState(JSON.parse(event.data)); setConnection('connected','실시간 연결됨 · WebSocket'); }
-        catch(error){ setConnection('reconnecting','수신 데이터 오류'); }
+        try{ applyState(JSON.parse(event.data)); markConnectionAlive(); }
+        catch(error){ scheduleVisibleDisconnect(); }
       };
-      socket.onerror = function(){ setConnection('reconnecting','연결 오류 · 재접속 중…'); };
+      socket.onerror = function(){ scheduleVisibleDisconnect(); };
       socket.onclose = function(){
         socket = null;
-        setConnection('reconnecting','연결 끊김 · 2초 후 재접속');
+        scheduleVisibleDisconnect();
         scheduleReconnect();
       };
     }catch(error){
       socket = null;
-      setConnection('reconnecting','실시간 연결 실패 · HTTP로 임시 연결');
+      scheduleVisibleDisconnect();
       scheduleReconnect();
     }
   }
@@ -346,9 +364,8 @@
       if(response.status === 401){ showLogin('PIN을 다시 입력해 주세요.'); return; }
       if(!response.ok) throw new Error('상태 조회 실패 (' + response.status + ')');
       applyState(await response.json());
-      if(!socket || socket.readyState !== WebSocket.OPEN) setConnection('reconnecting','HTTP 예비 연결 · WebSocket 재접속 중');
     }catch(error){
-      setConnection('reconnecting','연결 끊김 · ' + (error && error.message ? error.message : 'A7과 같은 Wi-Fi인지 확인하세요.'));
+      scheduleVisibleDisconnect();
     }finally{ refreshInFlight = false; }
   }
 
@@ -385,7 +402,7 @@
     loginButton = byId('loginButton');
     loginError = byId('loginError');
     connection = byId('connection');
-    connectionDot = byId('connectionDot');
+    connectionIcon = byId('connectionIcon');
     roomsElement = byId('rooms');
     alarmBanner = byId('alarmBanner');
     autoStopSelect = byId('autoStopSelect');
@@ -410,6 +427,7 @@
 
   window.addEventListener('beforeunload',function(){
     if(fallbackTimer) clearInterval(fallbackTimer);
+    if(connectionLostTimer) clearTimeout(connectionLostTimer);
     disconnectWebSocket();
   });
   window.addEventListener('DOMContentLoaded',function(){

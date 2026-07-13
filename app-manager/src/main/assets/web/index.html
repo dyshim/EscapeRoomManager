@@ -28,7 +28,14 @@
       <div>
         <h1>방탈출 운영</h1>
         <div class="connection-line">
-          <span id="connectionDot" class="connection-dot reconnecting"></span>
+          <span id="connectionIcon" class="connection-icon connecting" aria-hidden="true">
+            <svg viewBox="0 0 32 32" focusable="false">
+              <path class="wifi-wave wave-outer" d="M4 12.5C10.8 6.5 21.2 6.5 28 12.5"/>
+              <path class="wifi-wave wave-inner" d="M9 18C13 14.5 19 14.5 23 18"/>
+              <circle class="wifi-dot" cx="16" cy="24" r="2.2"/>
+              <path class="wifi-slash" d="M6 5L27 27"/>
+            </svg>
+          </span>
           <span id="connection">연결 확인 중…</span>
         </div>
       </div>

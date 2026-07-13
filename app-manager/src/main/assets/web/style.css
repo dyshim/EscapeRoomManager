@@ -11,10 +11,16 @@ button.primary{background:#146d31;border-color:#2ea85a}
 header{position:sticky;top:0;background:#080b0dF2;border-bottom:1px solid #343b42;padding:16px;z-index:4;backdrop-filter:blur(12px)}
 .header-row{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}
 h1{font-size:27px;margin:0;letter-spacing:-.4px}
-.connection-line{display:flex;align-items:center;gap:8px;color:#d7dde2;margin-top:7px;font-size:15px;font-weight:700}
-.connection-dot{width:11px;height:11px;border-radius:50%;display:inline-block;background:#ee3f3f;box-shadow:0 0 8px #ee3f3f88}
-.connection-dot.connected{background:#35d16f;box-shadow:0 0 8px #35d16f99}
-.connection-dot.reconnecting{background:#f2a51a;box-shadow:0 0 8px #f2a51a99}
+.connection-line{display:flex;align-items:center;gap:9px;color:#d7dde2;margin-top:7px;font-size:15px;font-weight:800}
+.connection-icon{width:25px;height:25px;display:inline-flex;align-items:center;justify-content:center;color:#f2a51a;filter:drop-shadow(0 0 5px #f2a51a66);transition:color .18s ease,filter .18s ease}
+.connection-icon svg{width:100%;height:100%;overflow:visible}
+.connection-icon .wifi-wave,.connection-icon .wifi-slash{fill:none;stroke:currentColor;stroke-width:2.8;stroke-linecap:round}
+.connection-icon .wifi-dot{fill:currentColor}
+.connection-icon .wifi-slash{display:none}
+.connection-icon.connected{color:#35d16f;filter:drop-shadow(0 0 6px #35d16f88)}
+.connection-icon.disconnected{color:#ff4b4b;filter:drop-shadow(0 0 6px #ff4b4b88)}
+.connection-icon.disconnected .wifi-slash{display:block}
+.connection-icon.connecting{color:#f2a51a;filter:drop-shadow(0 0 5px #f2a51a66)}
 .install-button{background:#24304c;border-color:#51679f;white-space:nowrap}
 .toolbar{display:flex;flex-wrap:wrap;gap:9px;margin-top:14px;align-items:center}
 .toolbar label{font-size:14px;color:#e3e7ea;font-weight:700}.toolbar select{background:#171c20;color:#fff;border:1px solid #5a6670;border-radius:9px;padding:10px;font-size:15px}
