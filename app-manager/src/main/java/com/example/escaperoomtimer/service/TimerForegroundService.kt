@@ -19,7 +19,6 @@ import com.example.escaperoomtimer.web.ManagerWebServer
 class TimerForegroundService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
-    private var heartbeatTicks = 0
     private val handler = Handler(Looper.getMainLooper())
 
     private val ticker = object : Runnable {
@@ -29,13 +28,16 @@ class TimerForegroundService : Service() {
                 ManagerGameEndAlarmController.play(applicationContext)
             }
             updateNotification()
-            heartbeatTicks++
-            if (heartbeatTicks >= 5) {
-                ManagerWebServer.ensureStarted(applicationContext)
-                heartbeatTicks = 0
-                ManagerTcpServer.heartbeat()
-            }
             handler.postDelayed(this, 1000L)
+        }
+    }
+
+
+    private val heartbeat = object : Runnable {
+        override fun run() {
+            ManagerWebServer.ensureStarted(applicationContext)
+            ManagerTcpServer.heartbeat()
+            handler.postDelayed(this, 5_000L)
         }
     }
 
@@ -52,6 +54,7 @@ class TimerForegroundService : Service() {
             TimerNotificationHelper.buildTimerNotification(this)
         )
         handler.post(ticker)
+        handler.post(heartbeat)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -66,6 +69,7 @@ class TimerForegroundService : Service() {
         ManagerWebServer.stop()
         HintProgressManager.stop()
         handler.removeCallbacks(ticker)
+        handler.removeCallbacks(heartbeat)
         releaseRuntimeLocks()
         super.onDestroy()
     }

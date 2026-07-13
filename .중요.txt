@@ -1,0 +1,4 @@
+release-key.jks
+키스토어 비밀번호: a3612166
+Alias 이름: escaperoom
+Alias 비밀번호: a3612166

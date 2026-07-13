@@ -42,6 +42,7 @@ object DisplaySyncManager {
 
     private var appContext: Context? = null
     private var debugTickRunnable: Runnable? = null
+    private var lastConnectionPulsePublishedAt = 0L
 
     private val tcpClient = DisplayTcpClient(
         onRoomReceived = ::updateRoom,
@@ -219,8 +220,12 @@ object DisplaySyncManager {
     @Synchronized
     private fun applyRoomCatalog(activeRoomIds: Set<String>) {
         if (_debugDemoActive.value) return
+        val before = roomsById.keys.toSet()
         roomsById.keys.retainAll(activeRoomIds)
-        publishCurrentRooms(System.currentTimeMillis())
+        if (before != roomsById.keys.toSet()) {
+            publishRoomCatalog()
+        }
+        publishConnectionPulse(System.currentTimeMillis())
     }
 
     @Synchronized
@@ -228,7 +233,15 @@ object DisplaySyncManager {
         if (_debugDemoActive.value) return
         val previous = roomsById[room.id]
         val selectedId = _selectedRoomId.value
+        val isNewRoom = previous == null
+        val metadataChanged = previous != null && (
+            previous.name != room.name ||
+                previous.status != room.status ||
+                previous.isRunning != room.isRunning
+            )
+
         roomsById[room.id] = room
+
         if (
             room.id == selectedId &&
             previous?.isRunning == true &&
@@ -238,7 +251,38 @@ object DisplaySyncManager {
         ) {
             appContext?.let(DisplayGameEndAlarmController::play)
         }
-        publishCurrentRooms(System.currentTimeMillis())
+
+        val receivedAt = System.currentTimeMillis()
+        mainHandler.post {
+            if (room.id == _selectedRoomId.value) {
+                _selectedRoom.value = room
+                persistWidgetState()
+            }
+            if (isNewRoom || metadataChanged) {
+                _rooms.value = roomsById.values.sortedBy { it.id }
+            }
+            publishConnectionPulse(receivedAt)
+        }
+    }
+
+    private fun publishRoomCatalog() {
+        val list = roomsById.values.sortedBy { it.id }
+        val selected = _selectedRoomId.value?.let(roomsById::get)
+        mainHandler.post {
+            _rooms.value = list
+            _selectedRoom.value = selected
+            persistWidgetState()
+        }
+    }
+
+    private fun publishConnectionPulse(receivedAt: Long) {
+        if (receivedAt - lastConnectionPulsePublishedAt < 3_000L) return
+        lastConnectionPulsePublishedAt = receivedAt
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            _lastReceivedAtMillis.value = receivedAt
+        } else {
+            mainHandler.post { _lastReceivedAtMillis.value = receivedAt }
+        }
     }
 
     private fun publishCurrentRooms(receivedAt: Long) {
@@ -248,6 +292,7 @@ object DisplaySyncManager {
             _rooms.value = list
             _selectedRoom.value = selected
             _lastReceivedAtMillis.value = receivedAt
+            lastConnectionPulsePublishedAt = receivedAt
             persistWidgetState()
         }
     }

@@ -15,6 +15,9 @@
   var fallbackTimer = null;
   var lastStateAt = 0;
   var installPrompt = null;
+  var renderedRoomModes = {};
+  var lastConnectionState = '';
+  var lastConnectionMessage = '';
 
   var loginOverlay;
   var loginForm;
@@ -47,6 +50,9 @@
     return '대기';
   }
   function setConnection(state,message){
+    if(lastConnectionState === state && lastConnectionMessage === message) return;
+    lastConnectionState = state;
+    lastConnectionMessage = message;
     connection.textContent = message;
     connectionDot.className = 'connection-dot ' + state;
   }
@@ -222,7 +228,7 @@
     var safeId = escapeHtml(room.id);
     var running = !!room.running;
     var ended = Number(room.seconds) <= 0 && !room.maintenance;
-    var html = '<section class="room ' + (ended?'ended':'') + '"><div class="top"><div class="name">' + escapeHtml(room.name) + '</div><div class="badge">' + statusText(room) + '</div></div><div class="time">' + timeText(room.seconds) + '</div><div class="end">종료 예정 ' + escapeHtml(room.endLabel) + '</div>';
+    var html = '<section class="room ' + (ended?'ended':'') + '" data-room-id="' + safeId + '"><div class="top"><div class="name">' + escapeHtml(room.name) + '</div><div class="badge">' + statusText(room) + '</div></div><div class="time">' + timeText(room.seconds) + '</div><div class="end">종료 예정 ' + escapeHtml(room.endLabel) + '</div>';
     if(ended){ html += '<div class="endedText">게임 종료</div><button class="alertStop room-alarm-button" data-room-id="' + safeId + '" type="button">이 방 웹 알람 확인</button>'; }
     if(room.maintenance){ html += '<div class="error">유지보수 중인 방입니다.</div>'; }
     else{
@@ -245,11 +251,51 @@
     document.querySelectorAll('.set-time-button').forEach(function(button){ button.addEventListener('click',function(){ setTime(button.dataset.roomId); }); });
     document.querySelectorAll('.room-alarm-button').forEach(function(button){ button.addEventListener('click',function(){ acknowledgeRoom(button.dataset.roomId); }); });
   }
+  function roomMode(room){
+    return [room.name, !!room.running, !!room.maintenance, Number(room.seconds) <= 0, room.status].join('|');
+  }
+  function findRoomCard(roomId){
+    var cards = roomsElement.querySelectorAll('.room[data-room-id]');
+    for(var index = 0; index < cards.length; index++){
+      if(cards[index].dataset.roomId === String(roomId)) return cards[index];
+    }
+    return null;
+  }
+  function patchRoomCard(room){
+    var element = findRoomCard(room.id);
+    var nextMode = roomMode(room);
+    if(!element || renderedRoomModes[room.id] !== nextMode){
+      return false;
+    }
+    var timeElement = element.querySelector('.time');
+    var endElement = element.querySelector('.end');
+    var badgeElement = element.querySelector('.badge');
+    if(timeElement) timeElement.textContent = timeText(room.seconds);
+    if(endElement) endElement.textContent = '종료 예정 ' + String(room.endLabel || '');
+    if(badgeElement) badgeElement.textContent = statusText(room);
+    return true;
+  }
+  function renderAllRooms(rooms){
+    renderedRoomModes = {};
+    roomsElement.innerHTML = rooms.length ? rooms.map(function(room){
+      renderedRoomModes[room.id] = roomMode(room);
+      return card(room);
+    }).join('') : '<div class="empty">사용 중인 방이 없습니다.</div>';
+    attachRoomEvents();
+  }
   function applyState(data){
     lastStateAt = Date.now();
-    detectNewEndings(data.rooms || []);
-    roomsElement.innerHTML = data.rooms && data.rooms.length ? data.rooms.map(card).join('') : '<div class="empty">사용 중인 방이 없습니다.</div>';
-    attachRoomEvents();
+    var rooms = data.rooms || [];
+    detectNewEndings(rooms);
+    var currentIds = Object.keys(renderedRoomModes).sort().join(',');
+    var nextIds = rooms.map(function(room){ return String(room.id); }).sort().join(',');
+    var requiresFullRender = currentIds !== nextIds;
+    if(!requiresFullRender){
+      for(var index = 0; index < rooms.length; index++){
+        if(!patchRoomCard(rooms[index])){ requiresFullRender = true; break; }
+      }
+    }
+    if(requiresFullRender) renderAllRooms(rooms);
   }
 
   function disconnectWebSocket(){
