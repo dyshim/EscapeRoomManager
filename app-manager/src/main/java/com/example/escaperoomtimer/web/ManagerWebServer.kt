@@ -27,6 +27,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Lightweight local HTTP + WebSocket server for the manager dashboard.
@@ -38,6 +39,7 @@ object ManagerWebServer {
     const val PORT = 8080
     private const val RETRY_DELAY_MS = 2_000L
     private const val WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+    private const val CONNECTION_COUNT_GRACE_MS = 15_000L
 
     private val desiredRunning = AtomicBoolean(false)
     private val accepting = AtomicBoolean(false)
@@ -49,6 +51,11 @@ object ManagerWebServer {
         Thread(runnable, "manager-web-request").apply { isDaemon = true }
     }
     private val webSocketClients = ConcurrentHashMap.newKeySet<WebSocketClient>()
+    private val displayedWebSocketCount = AtomicInteger(0)
+    private val connectionStateExecutor = Executors.newSingleThreadScheduledExecutor { runnable ->
+        Thread(runnable, "manager-web-connection-state").apply { isDaemon = true }
+    }
+    private val connectionCountGeneration = AtomicInteger(0)
     private val loginAttempts = ConcurrentHashMap<String, LoginAttempt>()
     private const val MAX_LOGIN_FAILURES = 5
     private const val LOGIN_LOCK_MS = 30_000L
@@ -62,7 +69,7 @@ object ManagerWebServer {
         get() = desiredRunning.get() && serverSocket?.isBound == true && serverSocket?.isClosed == false
 
     fun statusText(): String = when {
-        isRunning -> "웹 서버 실행 중 · 포트 $PORT · 웹 ${webSocketClients.size}대"
+        isRunning -> "웹 서버 실행 중 · 포트 $PORT · 웹 ${displayedWebSocketCount.get()}대"
         desiredRunning.get() && !lastErrorMessage.isNullOrBlank() -> "웹 서버 재시도 중 · ${lastErrorMessage}"
         desiredRunning.get() -> "웹 서버 시작 중…"
         else -> "웹 서버 중지됨"
@@ -82,6 +89,8 @@ object ManagerWebServer {
         desiredRunning.set(false)
         webSocketClients.toList().forEach { it.close() }
         webSocketClients.clear()
+        connectionCountGeneration.incrementAndGet()
+        displayedWebSocketCount.set(0)
         runCatching { serverSocket?.close() }
         serverSocket = null
     }
@@ -98,6 +107,7 @@ object ManagerWebServer {
         webSocketClients.toList().forEach { client ->
             if (!client.sendText(payload)) {
                 webSocketClients.remove(client)
+                publishWebSocketCount()
                 client.close()
             }
         }
@@ -305,6 +315,7 @@ object ManagerWebServer {
 
         val client = WebSocketClient(socket, output)
         webSocketClients.add(client)
+        publishWebSocketCount()
         client.sendText(stateJson())
         try {
             while (desiredRunning.get() && !socket.isClosed) {
@@ -319,9 +330,28 @@ object ManagerWebServer {
             }
         } finally {
             webSocketClients.remove(client)
+            publishWebSocketCount()
             client.close()
         }
         return true
+    }
+
+
+    private fun publishWebSocketCount() {
+        val actualCount = webSocketClients.size
+        val displayedCount = displayedWebSocketCount.get()
+
+        if (actualCount >= displayedCount) {
+            connectionCountGeneration.incrementAndGet()
+            displayedWebSocketCount.set(actualCount)
+            return
+        }
+
+        val generation = connectionCountGeneration.incrementAndGet()
+        connectionStateExecutor.schedule({
+            if (connectionCountGeneration.get() != generation) return@schedule
+            displayedWebSocketCount.set(webSocketClients.size)
+        }, CONNECTION_COUNT_GRACE_MS, TimeUnit.MILLISECONDS)
     }
 
     private sealed interface WebSocketFrame {

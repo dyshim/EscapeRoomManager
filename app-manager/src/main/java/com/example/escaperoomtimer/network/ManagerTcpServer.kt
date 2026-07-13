@@ -17,10 +17,13 @@ import java.net.Socket
 import java.net.SocketException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 object ManagerTcpServer {
     private const val STALE_CLIENT_MILLIS = 15_000L
+    private const val CONNECTION_UI_GRACE_MILLIS = 15_000L
 
     private class Client(
         val socket: Socket,
@@ -33,6 +36,7 @@ object ManagerTcpServer {
     private val clients = ConcurrentHashMap.newKeySet<Client>()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val _connectedDisplayCounts = mutableStateMapOf<String, Int>()
+    private val pendingCountDecreases = ConcurrentHashMap<String, ScheduledFuture<*>>()
     val connectedDisplayCounts: Map<String, Int> get() = _connectedDisplayCounts
 
     private val acceptExecutor = Executors.newSingleThreadExecutor { runnable ->
@@ -40,6 +44,9 @@ object ManagerTcpServer {
     }
     private val clientExecutor = Executors.newFixedThreadPool(8) { runnable ->
         Thread(runnable, "manager-tcp-client").apply { isDaemon = true }
+    }
+    private val connectionStateExecutor = Executors.newSingleThreadScheduledExecutor { runnable ->
+        Thread(runnable, "manager-connection-state").apply { isDaemon = true }
     }
 
     @Volatile private var serverSocket: ServerSocket? = null
@@ -169,10 +176,43 @@ object ManagerTcpServer {
     }
 
     private fun publishConnectionCounts() {
-        val counts = clients.mapNotNull { it.roomId }.groupingBy { it }.eachCount()
-        mainHandler.post {
-            _connectedDisplayCounts.clear()
-            _connectedDisplayCounts.putAll(counts)
+        mainHandler.post { publishConnectionCountsOnMain() }
+    }
+
+    private fun publishConnectionCountsOnMain() {
+        val actualCounts = clients.mapNotNull { it.roomId }.groupingBy { it }.eachCount()
+        val roomIds = _connectedDisplayCounts.keys + actualCounts.keys
+
+        roomIds.forEach { roomId ->
+            val displayedCount = _connectedDisplayCounts[roomId] ?: 0
+            val actualCount = actualCounts[roomId] ?: 0
+
+            if (actualCount >= displayedCount) {
+                pendingCountDecreases.remove(roomId)?.cancel(false)
+                if (actualCount > 0 && displayedCount != actualCount) {
+                    _connectedDisplayCounts[roomId] = actualCount
+                }
+                return@forEach
+            }
+
+            if (pendingCountDecreases.containsKey(roomId)) return@forEach
+
+            val pending = connectionStateExecutor.schedule({
+                pendingCountDecreases.remove(roomId)
+                val confirmedCount = clients.count { it.roomId == roomId }
+                mainHandler.post {
+                    val currentDisplayedCount = _connectedDisplayCounts[roomId] ?: 0
+                    if (confirmedCount >= currentDisplayedCount) return@post
+
+                    if (confirmedCount > 0) {
+                        _connectedDisplayCounts[roomId] = confirmedCount
+                    } else {
+                        _connectedDisplayCounts.remove(roomId)
+                    }
+                }
+            }, CONNECTION_UI_GRACE_MILLIS, TimeUnit.MILLISECONDS)
+
+            pendingCountDecreases[roomId] = pending
         }
     }
 }

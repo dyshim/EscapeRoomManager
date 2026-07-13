@@ -105,12 +105,18 @@ fun RoomCard(
                         fontSize = 34.sp,
                         fontWeight = FontWeight.Bold
                     )
-                    Text(
-                        text = if (room.isMaintenance) "손님용 선택에서 숨김" else if (connectedDisplays > 0) "손님 기기 ${connectedDisplays}대 연결" else "손님 기기 연결 없음",
-                        color = if (connectedDisplays > 0) Color(0xFF65E38D) else Color(0xFFB8C0C8),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    )
+                    if (room.isMaintenance || connectedDisplays > 0) {
+                        Text(
+                            text = if (room.isMaintenance) {
+                                "손님용 선택에서 숨김"
+                            } else {
+                                "손님 기기 ${connectedDisplays}대 연결"
+                            },
+                            color = if (connectedDisplays > 0) Color(0xFF65E38D) else Color(0xFFB8C0C8),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
             }
 
