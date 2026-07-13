@@ -12,6 +12,14 @@
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
         android:orientation="horizontal">
+        <ImageView
+            android:id="@+id/display_widget_connection_icon"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_marginEnd="8dp"
+            android:contentDescription="연결 상태"
+            android:src="@drawable/ic_widget_wifi_connected" />
+
         <TextView
             android:id="@+id/display_widget_connection"
             android:layout_width="0dp"

@@ -62,6 +62,8 @@ class DisplayRoomWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.display_widget_time, "--:--")
                 views.setTextViewText(R.id.display_widget_end, "시작 후 표시")
                 views.setTextViewText(R.id.display_widget_connection, "앱을 열어 연결해 주세요")
+                views.setImageViewResource(R.id.display_widget_connection_icon, R.drawable.ic_widget_wifi_waiting)
+                views.setTextColor(R.id.display_widget_connection, 0xFFFFB000.toInt())
                 views.setTextColor(R.id.display_widget_time, 0xFFE0E0E0.toInt())
                 return views
             }
@@ -70,6 +72,10 @@ class DisplayRoomWidgetProvider : AppWidgetProvider() {
             views.setTextViewText(R.id.display_widget_time, formatTime(state.seconds))
             views.setTextViewText(R.id.display_widget_end, expectedEndText(state))
             views.setTextViewText(R.id.display_widget_connection, if (state.connected) "직원용 앱 연결됨" else "연결 끊김")
+            views.setImageViewResource(
+                R.id.display_widget_connection_icon,
+                if (state.connected) R.drawable.ic_widget_wifi_connected else R.drawable.ic_widget_wifi_disconnected
+            )
             views.setTextColor(R.id.display_widget_time, timeColor(state.seconds, state.connected))
             views.setTextColor(R.id.display_widget_connection, if (state.connected) 0xFF44D17A.toInt() else 0xFFFF6B6B.toInt())
             return views
