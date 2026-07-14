@@ -485,18 +485,18 @@ private fun WifiConnectionStatus(
     connected: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val color = if (connected) Color(0xFF42E66F) else Color(0xFFFF4B4B)
+    val color = if (connected) Color(0xFF74C98C) else Color(0xFFE57373)
     Row(
         modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         WifiStatusIcon(connected = connected, color = color)
         Text(
             text = if (connected) "연결됨" else "연결 끊김",
             color = color,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold
         )
     }
 }
@@ -506,8 +506,8 @@ private fun WifiStatusIcon(
     connected: Boolean,
     color: Color
 ) {
-    Canvas(modifier = Modifier.size(width = 19.dp, height = 16.dp)) {
-        val stroke = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
+    Canvas(modifier = Modifier.size(width = 15.dp, height = 13.dp)) {
+        val stroke = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round)
         drawArc(
             color = color,
             startAngle = 215f,
@@ -536,7 +536,7 @@ private fun WifiStatusIcon(
                 color = color,
                 start = Offset(size.width * 0.08f, size.height * 0.08f),
                 end = Offset(size.width * 0.92f, size.height * 0.94f),
-                strokeWidth = 2.dp.toPx(),
+                strokeWidth = 1.6.dp.toPx(),
                 cap = StrokeCap.Round
             )
         }
