@@ -8,6 +8,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -34,7 +36,11 @@ class DisplayWidgetConfigActivity : ComponentActivity() {
             var opacity by remember { mutableIntStateOf(initial.opacity) }
             MaterialTheme {
                 Column(
-                    Modifier.fillMaxSize().background(Color(0xFF090B0D)).padding(22.dp),
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color(0xFF090B0D))
+                        .verticalScroll(rememberScrollState())
+                        .padding(22.dp),
                     verticalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
                     Text("손님용 위젯 설정", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
@@ -54,7 +60,7 @@ class DisplayWidgetConfigActivity : ComponentActivity() {
                             FilterChip(selected = opacity == value, onClick = { opacity = value }, label = { Text("$value%") })
                         }
                     }
-                    Spacer(Modifier.weight(1f))
+                    Spacer(Modifier.height(8.dp))
                     Button(
                         onClick = {
                             DisplayWidgetStyleRepository.save(this@DisplayWidgetConfigActivity, widgetId, DisplayWidgetStyleRepository.Style(palette, opacity))
