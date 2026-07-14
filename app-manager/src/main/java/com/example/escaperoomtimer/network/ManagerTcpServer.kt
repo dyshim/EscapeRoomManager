@@ -82,8 +82,14 @@ object ManagerTcpServer {
         val now = System.currentTimeMillis()
         clients.toList().forEach { client ->
             if (now - client.lastSeenAt > STALE_CLIENT_MILLIS) {
+                Log.w(
+                    TAG,
+                    "removing stale client: remote=${client.socket.remoteSocketAddress}, " +
+                        "lastSeen=${now - client.lastSeenAt}ms ago"
+                )
                 removeClient(client)
             } else {
+                Log.d(TAG, "heartbeat PING: remote=${client.socket.remoteSocketAddress}")
                 sendLine(client, TcpProtocol.encodePing())
             }
         }
@@ -185,7 +191,9 @@ object ManagerTcpServer {
                             publishConnectionCounts()
                         }
                         TcpProtocol.Message.Ping -> sendLine(client, TcpProtocol.encodePong())
-                        TcpProtocol.Message.Pong -> Unit
+                        TcpProtocol.Message.Pong -> {
+                            Log.d(TAG, "heartbeat PONG: remote=${client.socket.remoteSocketAddress}")
+                        }
                         else -> Unit
                     }
                 }

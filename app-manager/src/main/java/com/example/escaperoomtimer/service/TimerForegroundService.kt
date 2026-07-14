@@ -7,7 +7,11 @@ import android.os.Handler
 import android.os.PowerManager
 import android.os.IBinder
 import android.os.Looper
+import android.util.Log
 import androidx.core.app.NotificationManagerCompat
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.TimeUnit
 import com.example.escaperoomtimer.alarm.ManagerGameEndAlarmController
 import com.example.escaperoomtimer.manager.HintProgressManager
 import com.example.escaperoomtimer.manager.TimerManager
@@ -17,9 +21,14 @@ import com.example.escaperoomtimer.widget.RoomStatusWidgetProvider
 import com.example.escaperoomtimer.web.ManagerWebServer
 
 class TimerForegroundService : Service() {
+    private companion object {
+        const val TAG = "TimerForegroundService"
+    }
+
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
     private val handler = Handler(Looper.getMainLooper())
+    private var heartbeatExecutor: ScheduledExecutorService? = null
 
     private val ticker = object : Runnable {
         override fun run() {
@@ -32,11 +41,10 @@ class TimerForegroundService : Service() {
         }
     }
 
-
-    private val heartbeat = object : Runnable {
+    private val webServerWatchdog = object : Runnable {
         override fun run() {
-            ManagerWebServer.ensureStarted(applicationContext)
-            ManagerTcpServer.heartbeat()
+            runCatching { ManagerWebServer.ensureStarted(applicationContext) }
+                .onFailure { error -> Log.e(TAG, "web server watchdog failed", error) }
             handler.postDelayed(this, 5_000L)
         }
     }
@@ -54,7 +62,8 @@ class TimerForegroundService : Service() {
             TimerNotificationHelper.buildTimerNotification(this)
         )
         handler.post(ticker)
-        handler.post(heartbeat)
+        handler.post(webServerWatchdog)
+        startHeartbeat()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -69,9 +78,30 @@ class TimerForegroundService : Service() {
         ManagerWebServer.stop()
         HintProgressManager.stop()
         handler.removeCallbacks(ticker)
-        handler.removeCallbacks(heartbeat)
+        handler.removeCallbacks(webServerWatchdog)
+        heartbeatExecutor?.shutdownNow()
+        heartbeatExecutor = null
         releaseRuntimeLocks()
         super.onDestroy()
+    }
+
+
+    @Synchronized
+    private fun startHeartbeat() {
+        if (heartbeatExecutor != null) return
+        heartbeatExecutor = Executors.newSingleThreadScheduledExecutor { runnable ->
+            Thread(runnable, "manager-heartbeat").apply { isDaemon = true }
+        }.also { executor ->
+            executor.scheduleWithFixedDelay(
+                {
+                    runCatching { ManagerTcpServer.heartbeat() }
+                        .onFailure { error -> Log.e(TAG, "TCP heartbeat failed", error) }
+                },
+                0L,
+                5L,
+                TimeUnit.SECONDS
+            )
+        }
     }
 
     private fun acquireRuntimeLocks() {

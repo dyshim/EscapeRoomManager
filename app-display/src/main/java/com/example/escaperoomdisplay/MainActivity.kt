@@ -80,10 +80,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onDestroy() {
-        DisplaySyncManager.stop()
-        super.onDestroy()
-    }
 }
 
 @Composable
