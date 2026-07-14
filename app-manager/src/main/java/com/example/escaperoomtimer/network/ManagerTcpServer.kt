@@ -2,6 +2,7 @@ package com.example.escaperoomtimer.network
 
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import androidx.compose.runtime.mutableStateMapOf
 import com.example.escaperoomshared.model.SharedRoomState
 import com.example.escaperoomshared.network.TcpProtocol
@@ -22,6 +23,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 object ManagerTcpServer {
+    private const val TAG = "ManagerTcpServer"
     private const val STALE_CLIENT_MILLIS = 15_000L
     private const val CONNECTION_UI_GRACE_MILLIS = 15_000L
 
@@ -45,6 +47,9 @@ object ManagerTcpServer {
     private val clientExecutor = Executors.newFixedThreadPool(8) { runnable ->
         Thread(runnable, "manager-tcp-client").apply { isDaemon = true }
     }
+    private val sendExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "manager-tcp-send").apply { isDaemon = true }
+    }
     private val connectionStateExecutor = Executors.newSingleThreadScheduledExecutor { runnable ->
         Thread(runnable, "manager-connection-state").apply { isDaemon = true }
     }
@@ -53,7 +58,11 @@ object ManagerTcpServer {
 
     @Synchronized
     fun start() {
-        if (!running.compareAndSet(false, true)) return
+        if (!running.compareAndSet(false, true)) {
+            Log.i(TAG, "server start ignored: already running")
+            return
+        }
+        Log.i(TAG, "server starting: port=${TcpProtocol.PORT}")
         acceptExecutor.execute(::acceptLoop)
     }
 
@@ -116,8 +125,10 @@ object ManagerTcpServer {
             ServerSocket(TcpProtocol.PORT).use { server ->
                 server.reuseAddress = true
                 serverSocket = server
+                Log.i(TAG, "server started: port=${TcpProtocol.PORT}")
                 while (running.get()) {
                     val socket = server.accept().apply { tcpNoDelay = true; keepAlive = true }
+                    Log.i(TAG, "accepted client: remote=${socket.remoteSocketAddress}")
                     val client = Client(socket, BufferedWriter(OutputStreamWriter(socket.getOutputStream())))
                     clients += client
                     publishConnectionCounts()
@@ -125,8 +136,11 @@ object ManagerTcpServer {
                     sendCurrentRooms(client)
                 }
             }
-        } catch (_: SocketException) {
-        } catch (_: Exception) {
+        } catch (error: SocketException) {
+            if (running.get()) Log.e(TAG, "server socket exception: ${error.message}", error)
+            else Log.i(TAG, "server socket closed")
+        } catch (error: Exception) {
+            Log.e(TAG, "server exception: ${error.javaClass.simpleName}: ${error.message}", error)
         } finally {
             serverSocket = null
             running.set(false)
@@ -153,6 +167,7 @@ object ManagerTcpServer {
                     when (val message = TcpProtocol.decode(line)) {
                         is TcpProtocol.Message.HintUsed -> HintProgressManager.recordHintUsage(message.event)
                         is TcpProtocol.Message.StartRequest -> {
+                            Log.i(TAG, "start request received: room=${message.roomId}, remote=${client.socket.remoteSocketAddress}")
                             mainHandler.post {
                                 TimerManager.start(message.roomId)
                                 sendLine(client, TcpProtocol.encodeStartAccepted(message.roomId))
@@ -160,10 +175,12 @@ object ManagerTcpServer {
                             }
                         }
                         is TcpProtocol.Message.RegisterDisplay -> {
+                            Log.i(TAG, "room selection received: room=${message.roomId}, remote=${client.socket.remoteSocketAddress}")
                             client.roomId = message.roomId
                             publishConnectionCounts()
                         }
                         TcpProtocol.Message.UnregisterDisplay -> {
+                            Log.i(TAG, "room selection cleared: remote=${client.socket.remoteSocketAddress}")
                             client.roomId = null
                             publishConnectionCounts()
                         }
@@ -173,26 +190,40 @@ object ManagerTcpServer {
                     }
                 }
             }
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            if (!client.socket.isClosed) {
+                Log.e(TAG, "client exception: remote=${client.socket.remoteSocketAddress}, ${error.javaClass.simpleName}: ${error.message}", error)
+            }
         } finally {
             removeClient(client)
         }
     }
 
     private fun sendLines(client: Client, lines: List<String>) {
-        runCatching {
-            synchronized(client.writer) {
-                lines.forEach { line -> client.writer.write(line); client.writer.newLine() }
-                client.writer.flush()
+        val pendingLines = lines.toList()
+        sendExecutor.execute {
+            if (client !in clients || client.socket.isClosed) return@execute
+            runCatching {
+                synchronized(client.writer) {
+                    pendingLines.forEach { line ->
+                        client.writer.write(line)
+                        client.writer.newLine()
+                    }
+                    client.writer.flush()
+                }
+            }.onFailure { error ->
+                Log.e(TAG, "send failed: remote=${client.socket.remoteSocketAddress}, ${error.javaClass.simpleName}: ${error.message}", error)
+                removeClient(client)
             }
-        }.onFailure { removeClient(client) }
+        }
     }
 
     private fun sendLine(client: Client, line: String) = sendLines(client, listOf(line))
 
     private fun removeClient(client: Client) {
-        clients.remove(client)
+        val removed = clients.remove(client)
         runCatching { client.socket.close() }
+        if (removed) Log.i(TAG, "client removed: remote=${client.socket.remoteSocketAddress}, room=${client.roomId}")
         publishConnectionCounts()
     }
 
