@@ -68,6 +68,9 @@ object ManagerWebServer {
     val isRunning: Boolean
         get() = desiredRunning.get() && serverSocket?.isBound == true && serverSocket?.isClosed == false
 
+    val connectedWebCount: Int
+        get() = displayedWebSocketCount.get()
+
     fun statusText(): String = when {
         isRunning -> "웹 서버 실행 중 · 포트 $PORT · 웹 ${displayedWebSocketCount.get()}대"
         desiredRunning.get() && !lastErrorMessage.isNullOrBlank() -> "웹 서버 재시도 중 · ${lastErrorMessage}"
