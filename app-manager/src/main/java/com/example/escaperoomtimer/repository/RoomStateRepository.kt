@@ -25,6 +25,9 @@ object RoomStateRepository {
                 put("guestScreenEnabled", room.guestScreenEnabled)
                 put("isEnabled", room.isEnabled)
                 put("isMaintenance", room.isMaintenance)
+                put("startedAtEpochMillis", room.startedAtEpochMillis ?: JSONObject.NULL)
+                put("finishedAtEpochMillis", room.finishedAtEpochMillis ?: JSONObject.NULL)
+                put("elapsedSeconds", room.elapsedSeconds)
             })
         }
 
@@ -53,6 +56,13 @@ object RoomStateRepository {
                     val savedSeconds = item.optInt("seconds", 0).coerceAtLeast(0)
                     val restoredSeconds = if (wasRunning) (savedSeconds - elapsedSeconds).coerceAtLeast(0) else savedSeconds
                     val restoredRunning = wasRunning && restoredSeconds > 0
+                    val storedFinishedAt = item.optNullableLong("finishedAtEpochMillis")
+                    val restoredFinishedAt = when {
+                        restoredSeconds > 0 -> null
+                        storedFinishedAt != null -> storedFinishedAt
+                        wasRunning -> savedAt + savedSeconds * 1_000L
+                        else -> null
+                    }
 
                     add(
                         RoomInfo(
@@ -69,7 +79,13 @@ object RoomStateRepository {
                             hintEnabled = item.optBoolean("hintEnabled", true),
                             guestScreenEnabled = item.optBoolean("guestScreenEnabled", true),
                             isEnabled = item.optBoolean("isEnabled", true),
-                            isMaintenance = item.optBoolean("isMaintenance", false)
+                            isMaintenance = item.optBoolean("isMaintenance", false),
+                            startedAtEpochMillis = item.optNullableLong("startedAtEpochMillis"),
+                            finishedAtEpochMillis = restoredFinishedAt,
+                            elapsedSeconds = (
+                                item.optInt("elapsedSeconds", 0).coerceAtLeast(0).toLong() +
+                                    if (wasRunning) minOf(elapsedSeconds, savedSeconds) else 0
+                                ).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
                         )
                     )
                 }
@@ -90,4 +106,7 @@ object RoomStateRepository {
                 }
             }
     }
+
+    private fun JSONObject.optNullableLong(name: String): Long? =
+        if (has(name) && !isNull(name)) optLong(name) else null
 }

@@ -110,7 +110,9 @@ object TimerManager {
             room.copy(
                 seconds = startSeconds,
                 isRunning = true,
-                status = runningStatusFromSeconds(startSeconds)
+                status = runningStatusFromSeconds(startSeconds),
+                startedAtEpochMillis = room.startedAtEpochMillis ?: System.currentTimeMillis(),
+                finishedAtEpochMillis = null
             )
         }
     }
@@ -125,13 +127,26 @@ object TimerManager {
             room.copy(
                 seconds = fixedSeconds,
                 isRunning = nextRunning,
-                status = if (nextRunning) runningStatusFromSeconds(fixedSeconds) else RoomStatus.PAUSED
+                status = if (nextRunning) runningStatusFromSeconds(fixedSeconds) else RoomStatus.PAUSED,
+                startedAtEpochMillis = if (nextRunning) {
+                    room.startedAtEpochMillis ?: System.currentTimeMillis()
+                } else {
+                    room.startedAtEpochMillis
+                },
+                finishedAtEpochMillis = if (nextRunning) null else room.finishedAtEpochMillis
             )
         }
     }
 
     fun stop(roomId: String) {
-        updateRoom(roomId) { room -> room.copy(seconds = 0, isRunning = false, status = RoomStatus.FINISHED) }
+        updateRoom(roomId) { room ->
+            room.copy(
+                seconds = 0,
+                isRunning = false,
+                status = RoomStatus.FINISHED,
+                finishedAtEpochMillis = System.currentTimeMillis()
+            )
+        }
     }
 
     fun adjustSeconds(roomId: String, deltaSeconds: Int) {
@@ -141,7 +156,8 @@ object TimerManager {
             room.copy(
                 seconds = nextSeconds,
                 isRunning = nextRunning,
-                status = manualStatus(room, nextSeconds, nextRunning)
+                status = manualStatus(room, nextSeconds, nextRunning),
+                finishedAtEpochMillis = finishTimeFor(room, nextSeconds)
             )
         }
     }
@@ -153,18 +169,28 @@ object TimerManager {
             room.copy(
                 seconds = nextSeconds,
                 isRunning = nextRunning,
-                status = manualStatus(room, nextSeconds, nextRunning)
+                status = manualStatus(room, nextSeconds, nextRunning),
+                finishedAtEpochMillis = finishTimeFor(room, nextSeconds)
             )
         }
     }
 
-    fun restoreTimeState(roomId: String, seconds: Int, isRunning: Boolean, status: RoomStatus) {
+    fun restoreTimeState(
+        roomId: String,
+        seconds: Int,
+        isRunning: Boolean,
+        status: RoomStatus,
+        startedAtEpochMillis: Long?,
+        finishedAtEpochMillis: Long?
+    ) {
         updateRoom(roomId) { room ->
             val safeSeconds = seconds.coerceAtLeast(0)
             room.copy(
                 seconds = safeSeconds,
                 isRunning = isRunning && safeSeconds > 0,
-                status = if (safeSeconds <= 0) RoomStatus.FINISHED else status
+                status = if (safeSeconds <= 0) RoomStatus.FINISHED else status,
+                startedAtEpochMillis = startedAtEpochMillis,
+                finishedAtEpochMillis = finishedAtEpochMillis
             )
         }
     }
@@ -174,7 +200,14 @@ object TimerManager {
 
     fun reset(roomId: String) {
         updateRoom(roomId) { room ->
-            room.copy(seconds = room.defaultMinutes * 60, isRunning = false, status = RoomStatus.WAITING)
+            room.copy(
+                seconds = room.defaultMinutes * 60,
+                isRunning = false,
+                status = RoomStatus.WAITING,
+                startedAtEpochMillis = null,
+                finishedAtEpochMillis = null,
+                elapsedSeconds = 0
+            )
         }
     }
 
@@ -187,7 +220,10 @@ object TimerManager {
                 name = cleanName,
                 defaultMinutes = cleanMinutes,
                 seconds = if (shouldResetTime) cleanMinutes * 60 else room.seconds,
-                status = if (shouldResetTime) RoomStatus.WAITING else room.status
+                status = if (shouldResetTime) RoomStatus.WAITING else room.status,
+                startedAtEpochMillis = if (shouldResetTime) null else room.startedAtEpochMillis,
+                finishedAtEpochMillis = if (shouldResetTime) null else room.finishedAtEpochMillis,
+                elapsedSeconds = if (shouldResetTime) 0 else room.elapsedSeconds
             )
         }
     }
@@ -200,7 +236,9 @@ object TimerManager {
                 rooms[index] = room.copy(
                     seconds = nextSeconds,
                     isRunning = nextSeconds > 0,
-                    status = if (nextSeconds == 0) RoomStatus.FINISHED else runningStatusFromSeconds(nextSeconds)
+                    status = if (nextSeconds == 0) RoomStatus.FINISHED else runningStatusFromSeconds(nextSeconds),
+                    finishedAtEpochMillis = if (nextSeconds == 0) System.currentTimeMillis() else null,
+                    elapsedSeconds = (room.elapsedSeconds + 1).coerceAtMost(Int.MAX_VALUE)
                 )
                 if (nextSeconds == 0) naturallyCompletedRoomIds.addLast(room.id)
                 changed = true
@@ -251,5 +289,11 @@ object TimerManager {
         seconds <= 0 -> RoomStatus.FINISHED
         seconds <= 5 * 60 -> RoomStatus.WARNING
         else -> RoomStatus.RUNNING
+    }
+
+    private fun finishTimeFor(room: RoomInfo, seconds: Int): Long? = when {
+        seconds > 0 -> null
+        room.seconds <= 0 -> room.finishedAtEpochMillis
+        else -> System.currentTimeMillis()
     }
 }
