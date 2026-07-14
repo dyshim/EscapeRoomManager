@@ -3,6 +3,8 @@ package com.example.escaperoomdisplay
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.os.Bundle
+import android.os.SystemClock
+import android.util.Log
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -35,6 +37,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -50,9 +53,11 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.text.KeyboardOptions
 import com.example.escaperoomdisplay.alarm.DisplayGameEndAlarmController
 import com.example.escaperoomdisplay.network.DisplaySyncManager
+import com.example.escaperoomshared.network.TcpProtocol
 import com.example.escaperoomdisplay.settings.DisplayAdminPreferences
 import com.example.escaperoomdisplay.settings.DisplayAlarmSettingsDialog
 import com.example.escaperoomdisplay.ui.theme.EscapeRoomTimerTheme
@@ -87,6 +92,7 @@ private fun DisplayApp() {
     val rooms by DisplaySyncManager.rooms
     val selectedRoomId by DisplaySyncManager.selectedRoomId
     val selectedRoom by DisplaySyncManager.selectedRoom
+    val selectedRoomReceivedAtElapsedRealtime by DisplaySyncManager.selectedRoomReceivedAtElapsedRealtime
     val debugDemoActive by DisplaySyncManager.debugDemoActive
     val serverHost by DisplaySyncManager.serverHost
     val tcpConnected by DisplaySyncManager.isConnected
@@ -106,6 +112,7 @@ private fun DisplayApp() {
     } else {
         GuestDisplayScreen(
             room = selectedRoom,
+            roomReceivedAtElapsedRealtime = selectedRoomReceivedAtElapsedRealtime,
             tcpConnected = tcpConnected,
             debugDemoActive = debugDemoActive,
             onStartRoom = DisplaySyncManager::requestStart,
@@ -175,7 +182,10 @@ private fun RoomSelectionScreen(
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Button(
-                onClick = { onServerHostChanged(hostInput) },
+                onClick = {
+                    Log.i("DisplayConnection", "connect button clicked: host=${hostInput.trim()}, port=${TcpProtocol.PORT}")
+                    onServerHostChanged(hostInput)
+                },
                 modifier = Modifier.weight(1f),
                 enabled = hostInput.trim().isNotEmpty()
             ) {
@@ -365,6 +375,7 @@ private fun RoomSelectionCard(room: SharedRoomState, onClick: () -> Unit) {
 @Composable
 private fun GuestDisplayScreen(
     room: SharedRoomState?,
+    roomReceivedAtElapsedRealtime: Long,
     tcpConnected: Boolean,
     debugDemoActive: Boolean,
     onStartRoom: (String) -> Boolean,
@@ -390,14 +401,44 @@ private fun GuestDisplayScreen(
         // Prevent guests from leaving the display screen accidentally.
     }
 
+    val displayedSeconds by produceState(
+        initialValue = room?.seconds ?: 0,
+        key1 = room?.id,
+        key2 = room?.seconds,
+        key3 = roomReceivedAtElapsedRealtime
+    ) {
+        val snapshot = room
+        if (snapshot == null) {
+            value = 0
+            return@produceState
+        }
+
+        while (true) {
+            value = if (snapshot.isRunning && roomReceivedAtElapsedRealtime > 0L) {
+                val elapsedSeconds = (
+                    SystemClock.elapsedRealtime() - roomReceivedAtElapsedRealtime
+                ).coerceAtLeast(0L) / 1_000L
+                (snapshot.seconds - elapsedSeconds.toInt()).coerceAtLeast(0)
+            } else {
+                snapshot.seconds.coerceAtLeast(0)
+            }
+
+            if (!snapshot.isRunning || value <= 0) break
+            val elapsedMillis = (
+                SystemClock.elapsedRealtime() - roomReceivedAtElapsedRealtime
+            ).coerceAtLeast(0L)
+            delay((1_000L - elapsedMillis % 1_000L).coerceAtLeast(50L))
+        }
+    }
+
     val isConnected = debugDemoActive || tcpConnected
     val roomName = room?.name ?: "선택한 방을 기다리는 중"
-    val isGameFinished = room != null && room.seconds <= 0 && !room.isRunning
-    val showStartButton = room != null && !room.isRunning && !isGameFinished
-    val timeText = room?.seconds?.let(::formatTime) ?: "--:--"
+    val isGameFinished = room != null && displayedSeconds <= 0 && !room.isRunning
+    val showStartButton = room?.status == "WAITING" && !room.isRunning && !isGameFinished
+    val timeText = room?.let { formatTime(displayedSeconds) } ?: "--:--"
     val timeColor = when {
         !isConnected -> Color(0xFFD0C8D9)
-        (room?.seconds ?: Int.MAX_VALUE) <= 5 * 60 -> Color(0xFFFF4B4B)
+        displayedSeconds <= 5 * 60 -> Color(0xFFFF4B4B)
         else -> Color.White
     }
 

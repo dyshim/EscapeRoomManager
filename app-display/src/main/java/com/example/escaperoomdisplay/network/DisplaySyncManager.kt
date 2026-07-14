@@ -3,6 +3,8 @@ package com.example.escaperoomdisplay.network
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
+import android.util.Log
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import com.example.escaperoomdisplay.alarm.DisplayGameEndAlarmController
@@ -10,6 +12,7 @@ import com.example.escaperoomshared.model.HintUsageEvent
 import com.example.escaperoomshared.model.SharedRoomState
 import com.example.escaperoomdisplay.widget.DisplayRoomWidgetProvider
 import com.example.escaperoomdisplay.widget.DisplayWidgetStateRepository
+import kotlin.math.abs
 
 object DisplaySyncManager {
     private const val VISIBLE_DISCONNECT_DELAY_MILLIS = 6_000L
@@ -31,6 +34,9 @@ object DisplaySyncManager {
 
     private val _lastReceivedAtMillis = mutableStateOf(0L)
     val lastReceivedAtMillis: State<Long> = _lastReceivedAtMillis
+
+    private val _selectedRoomReceivedAtElapsedRealtime = mutableStateOf(0L)
+    val selectedRoomReceivedAtElapsedRealtime: State<Long> = _selectedRoomReceivedAtElapsedRealtime
 
     private val _debugDemoActive = mutableStateOf(false)
     val debugDemoActive: State<Boolean> = _debugDemoActive
@@ -81,6 +87,7 @@ object DisplaySyncManager {
 
     fun setServerHost(context: Context, host: String) {
         val normalized = host.trim()
+        Log.i("DisplayConnection", "connection requested: host=$normalized, port=${com.example.escaperoomshared.network.TcpProtocol.PORT}")
         context.applicationContext
             .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
@@ -96,6 +103,7 @@ object DisplaySyncManager {
             roomsById.clear()
             _rooms.value = emptyList()
             _selectedRoom.value = null
+            _selectedRoomReceivedAtElapsedRealtime.value = 0L
             _lastReceivedAtMillis.value = 0L
         }
 
@@ -104,7 +112,10 @@ object DisplaySyncManager {
 
     fun reconnect() {
         val host = _serverHost.value
-        if (host.isNotBlank()) tcpClient.connect(host)
+        if (host.isNotBlank()) {
+            Log.i("DisplayConnection", "reconnect requested: host=$host, port=${com.example.escaperoomshared.network.TcpProtocol.PORT}")
+            tcpClient.connect(host)
+        }
     }
 
     fun selectRoom(context: Context, roomId: String) {
@@ -117,6 +128,7 @@ object DisplaySyncManager {
         mainHandler.post {
             _selectedRoomId.value = roomId
             _selectedRoom.value = roomsById[roomId]
+            _selectedRoomReceivedAtElapsedRealtime.value = SystemClock.elapsedRealtime()
             tcpClient.registerRoom(roomId)
             persistWidgetState()
         }
@@ -132,6 +144,7 @@ object DisplaySyncManager {
         mainHandler.post {
             _selectedRoomId.value = null
             _selectedRoom.value = null
+            _selectedRoomReceivedAtElapsedRealtime.value = 0L
             tcpClient.registerRoom(null)
             persistWidgetState()
         }
@@ -252,6 +265,7 @@ object DisplaySyncManager {
             roomsById.clear()
             _rooms.value = emptyList()
             _selectedRoom.value = null
+            _selectedRoomReceivedAtElapsedRealtime.value = 0L
             _lastReceivedAtMillis.value = 0L
         }
     }
@@ -293,10 +307,32 @@ object DisplaySyncManager {
         }
 
         val receivedAt = System.currentTimeMillis()
+        val receivedAtElapsedRealtime = SystemClock.elapsedRealtime()
         mainHandler.post {
             if (room.id == _selectedRoomId.value) {
-                _selectedRoom.value = room
-                persistWidgetState()
+                val current = _selectedRoom.value
+                val currentReceivedAt = _selectedRoomReceivedAtElapsedRealtime.value
+                val expectedSeconds = if (current?.isRunning == true && currentReceivedAt > 0L) {
+                    val elapsedSeconds = (
+                        receivedAtElapsedRealtime - currentReceivedAt
+                    ).coerceAtLeast(0L) / 1_000L
+                    (current.seconds - elapsedSeconds.toInt()).coerceAtLeast(0)
+                } else {
+                    current?.seconds
+                }
+                val shouldReplaceSnapshot = current == null ||
+                    current.id != room.id ||
+                    current.name != room.name ||
+                    current.status != room.status ||
+                    current.isRunning != room.isRunning ||
+                    expectedSeconds == null ||
+                    abs(expectedSeconds - room.seconds) > 1
+
+                if (shouldReplaceSnapshot) {
+                    _selectedRoom.value = room
+                    _selectedRoomReceivedAtElapsedRealtime.value = receivedAtElapsedRealtime
+                    persistWidgetState()
+                }
             }
             if (isNewRoom || metadataChanged) {
                 _rooms.value = roomsById.values.sortedBy { it.id }
@@ -311,6 +347,7 @@ object DisplaySyncManager {
         mainHandler.post {
             _rooms.value = list
             _selectedRoom.value = selected
+            _selectedRoomReceivedAtElapsedRealtime.value = if (selected == null) 0L else SystemClock.elapsedRealtime()
             persistWidgetState()
         }
     }
@@ -332,6 +369,7 @@ object DisplaySyncManager {
         mainHandler.post {
             _rooms.value = list
             _selectedRoom.value = selected
+            _selectedRoomReceivedAtElapsedRealtime.value = if (selected == null) 0L else SystemClock.elapsedRealtime()
             _lastReceivedAtMillis.value = receivedAt
             lastConnectionPulsePublishedAt = receivedAt
             persistWidgetState()

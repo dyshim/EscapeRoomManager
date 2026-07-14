@@ -1,11 +1,15 @@
 package com.example.escaperoomdisplay.widget
 
+import android.app.AlarmManager
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.Build
+import android.os.SystemClock
+import android.view.View
 import android.widget.RemoteViews
 import com.example.escaperoomdisplay.MainActivity
 import com.example.escaperoomdisplay.R
@@ -14,6 +18,11 @@ import java.util.Date
 import java.util.Locale
 
 class DisplayRoomWidgetProvider : AppWidgetProvider() {
+    override fun onReceive(context: Context, intent: Intent) {
+        super.onReceive(context, intent)
+        if (intent.action == ACTION_COUNTDOWN_FINISHED) updateAll(context)
+    }
+
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
         appWidgetIds.forEach { updateWidget(context, it) }
     }
@@ -24,6 +33,10 @@ class DisplayRoomWidgetProvider : AppWidgetProvider() {
     }
 
     companion object {
+        private const val ACTION_COUNTDOWN_FINISHED =
+            "com.example.escaperoomdisplay.widget.COUNTDOWN_FINISHED"
+        private const val COUNTDOWN_ALARM_REQUEST_CODE = 7200
+
         fun updateAll(context: Context) {
             val appContext = context.applicationContext
             val manager = AppWidgetManager.getInstance(appContext)
@@ -37,7 +50,11 @@ class DisplayRoomWidgetProvider : AppWidgetProvider() {
 
         private fun buildViews(context: Context, widgetId: Int): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.widget_display_room)
-            views.setInt(R.id.display_widget_root, "setBackgroundResource", DisplayWidgetStyleRepository.backgroundRes(DisplayWidgetStyleRepository.load(context, widgetId)))
+            views.setInt(
+                R.id.display_widget_root,
+                "setBackgroundResource",
+                DisplayWidgetStyleRepository.backgroundRes(DisplayWidgetStyleRepository.load(context, widgetId))
+            )
             val state = DisplayWidgetStateRepository.load(context)
 
             val openIntent = Intent(context, MainActivity::class.java).apply {
@@ -45,7 +62,12 @@ class DisplayRoomWidgetProvider : AppWidgetProvider() {
             }
             views.setOnClickPendingIntent(
                 R.id.display_widget_content,
-                PendingIntent.getActivity(context, 3101 + widgetId, openIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+                PendingIntent.getActivity(
+                    context,
+                    3101 + widgetId,
+                    openIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
             )
 
             val configIntent = Intent(context, DisplayWidgetConfigActivity::class.java).apply {
@@ -54,36 +76,115 @@ class DisplayRoomWidgetProvider : AppWidgetProvider() {
             }
             views.setOnClickPendingIntent(
                 R.id.display_widget_settings,
-                PendingIntent.getActivity(context, 6100 + widgetId, configIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+                PendingIntent.getActivity(
+                    context,
+                    6100 + widgetId,
+                    configIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
             )
 
             if (state == null) {
+                cancelCountdownFinish(context)
+                showFixedTime(views, "--:--")
                 views.setTextViewText(R.id.display_widget_room_name, "방을 선택해 주세요")
-                views.setTextViewText(R.id.display_widget_time, "--:--")
                 views.setTextViewText(R.id.display_widget_end, "시작 후 표시")
                 views.setTextViewText(R.id.display_widget_connection, "앱을 열어 연결해 주세요")
                 views.setImageViewResource(R.id.display_widget_connection_icon, R.drawable.ic_widget_wifi_waiting)
                 views.setTextColor(R.id.display_widget_connection, 0xFFFFB000.toInt())
-                views.setTextColor(R.id.display_widget_time, 0xFFE0E0E0.toInt())
+                setTimeColor(views, 0xFFE0E0E0.toInt())
                 return views
             }
 
+            val remainingSeconds = state.remainingSeconds()
             views.setTextViewText(R.id.display_widget_room_name, state.roomName)
-            views.setTextViewText(R.id.display_widget_time, formatTime(state.seconds))
-            views.setTextViewText(R.id.display_widget_end, expectedEndText(state))
-            views.setTextViewText(R.id.display_widget_connection, if (state.connected) "직원용 앱 연결됨" else "연결 끊김")
+
+            if (state.isRunning && remainingSeconds > 0 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                showCountdown(views, remainingSeconds)
+                scheduleCountdownFinish(context, remainingSeconds)
+            } else {
+                cancelCountdownFinish(context)
+                showFixedTime(views, formatTime(remainingSeconds))
+            }
+
+            views.setTextViewText(R.id.display_widget_end, expectedEndText(state, remainingSeconds))
+            views.setTextViewText(
+                R.id.display_widget_connection,
+                if (state.connected) "직원용 앱 연결됨" else "연결 끊김"
+            )
             views.setImageViewResource(
                 R.id.display_widget_connection_icon,
                 if (state.connected) R.drawable.ic_widget_wifi_connected else R.drawable.ic_widget_wifi_disconnected
             )
-            views.setTextColor(R.id.display_widget_time, timeColor(state.seconds, state.connected))
-            views.setTextColor(R.id.display_widget_connection, if (state.connected) 0xFF44D17A.toInt() else 0xFFFF6B6B.toInt())
+            setTimeColor(views, timeColor(remainingSeconds, state.connected))
+            views.setTextColor(
+                R.id.display_widget_connection,
+                if (state.connected) 0xFF44D17A.toInt() else 0xFFFF6B6B.toInt()
+            )
             return views
         }
 
-        private fun expectedEndText(state: DisplayWidgetStateRepository.SavedState): String = when {
-            state.status == "FINISHED" || state.seconds <= 0 -> "종료됨"
-            state.isRunning -> "종료 예정 ${SimpleDateFormat("a h:mm", Locale.KOREA).format(Date(System.currentTimeMillis() + state.seconds * 1_000L))}"
+        private fun showCountdown(views: RemoteViews, remainingSeconds: Int) {
+            val base = SystemClock.elapsedRealtime() + remainingSeconds * 1_000L
+            views.setViewVisibility(R.id.display_widget_time, View.GONE)
+            views.setViewVisibility(R.id.display_widget_chronometer, View.VISIBLE)
+            views.setChronometer(R.id.display_widget_chronometer, base, null, true)
+            views.setBoolean(R.id.display_widget_chronometer, "setCountDown", true)
+        }
+
+        private fun showFixedTime(views: RemoteViews, text: String) {
+            views.setChronometer(R.id.display_widget_chronometer, SystemClock.elapsedRealtime(), null, false)
+            views.setViewVisibility(R.id.display_widget_chronometer, View.GONE)
+            views.setViewVisibility(R.id.display_widget_time, View.VISIBLE)
+            views.setTextViewText(R.id.display_widget_time, text)
+        }
+
+        private fun setTimeColor(views: RemoteViews, color: Int) {
+            views.setTextColor(R.id.display_widget_time, color)
+            views.setTextColor(R.id.display_widget_chronometer, color)
+        }
+
+        private fun countdownFinishIntent(context: Context): PendingIntent {
+            val intent = Intent(context, DisplayRoomWidgetProvider::class.java).apply {
+                action = ACTION_COUNTDOWN_FINISHED
+            }
+            return PendingIntent.getBroadcast(
+                context,
+                COUNTDOWN_ALARM_REQUEST_CODE,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        }
+
+        private fun scheduleCountdownFinish(context: Context, remainingSeconds: Int) {
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val triggerAt = SystemClock.elapsedRealtime() + remainingSeconds * 1_000L
+            val operation = countdownFinishIntent(context)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setAndAllowWhileIdle(
+                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    triggerAt,
+                    operation
+                )
+            } else {
+                alarmManager.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, operation)
+            }
+        }
+
+        private fun cancelCountdownFinish(context: Context) {
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            alarmManager.cancel(countdownFinishIntent(context))
+        }
+
+        private fun expectedEndText(
+            state: DisplayWidgetStateRepository.SavedState,
+            remainingSeconds: Int
+        ): String = when {
+            state.status == "FINISHED" || remainingSeconds <= 0 -> "종료됨"
+            state.isRunning -> {
+                val endAt = System.currentTimeMillis() + remainingSeconds * 1_000L
+                "종료 예정 ${SimpleDateFormat("a h:mm", Locale.KOREA).format(Date(endAt))}"
+            }
             state.status == "PAUSED" -> "일시정지 중"
             else -> "시작 후 표시"
         }

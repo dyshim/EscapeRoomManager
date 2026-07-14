@@ -1,6 +1,7 @@
 package com.example.escaperoomdisplay.widget
 
 import android.content.Context
+import android.os.SystemClock
 import com.example.escaperoomshared.model.SharedRoomState
 
 object DisplayWidgetStateRepository {
@@ -11,6 +12,8 @@ object DisplayWidgetStateRepository {
     private const val KEY_STATUS = "status"
     private const val KEY_IS_RUNNING = "is_running"
     private const val KEY_CONNECTED = "connected"
+    private const val KEY_SAVED_AT_MILLIS = "saved_at_millis"
+    private const val KEY_SAVED_AT_ELAPSED_REALTIME = "saved_at_elapsed_realtime"
 
     data class SavedState(
         val roomId: String,
@@ -18,8 +21,26 @@ object DisplayWidgetStateRepository {
         val seconds: Int,
         val status: String,
         val isRunning: Boolean,
-        val connected: Boolean
-    )
+        val connected: Boolean,
+        val savedAtMillis: Long,
+        val savedAtElapsedRealtime: Long
+    ) {
+        fun remainingSeconds(
+            nowMillis: Long = System.currentTimeMillis(),
+            nowElapsedRealtime: Long = SystemClock.elapsedRealtime()
+        ): Int {
+            if (!isRunning || seconds <= 0) return seconds.coerceAtLeast(0)
+            val elapsedMillis = if (
+                savedAtElapsedRealtime > 0L && nowElapsedRealtime >= savedAtElapsedRealtime
+            ) {
+                nowElapsedRealtime - savedAtElapsedRealtime
+            } else {
+                (nowMillis - savedAtMillis).coerceAtLeast(0L)
+            }
+            val elapsedSeconds = (elapsedMillis / 1_000L).toInt()
+            return (seconds - elapsedSeconds).coerceAtLeast(0)
+        }
+    }
 
     fun save(context: Context, room: SharedRoomState?, connected: Boolean) {
         val editor = context.applicationContext
@@ -34,6 +55,8 @@ object DisplayWidgetStateRepository {
                 .remove(KEY_SECONDS)
                 .remove(KEY_STATUS)
                 .remove(KEY_IS_RUNNING)
+                .remove(KEY_SAVED_AT_MILLIS)
+                .remove(KEY_SAVED_AT_ELAPSED_REALTIME)
                 .apply()
             return
         }
@@ -44,6 +67,8 @@ object DisplayWidgetStateRepository {
             .putInt(KEY_SECONDS, room.seconds.coerceAtLeast(0))
             .putString(KEY_STATUS, room.status)
             .putBoolean(KEY_IS_RUNNING, room.isRunning)
+            .putLong(KEY_SAVED_AT_MILLIS, System.currentTimeMillis())
+            .putLong(KEY_SAVED_AT_ELAPSED_REALTIME, SystemClock.elapsedRealtime())
             .apply()
     }
 
@@ -57,7 +82,9 @@ object DisplayWidgetStateRepository {
             seconds = prefs.getInt(KEY_SECONDS, 0).coerceAtLeast(0),
             status = prefs.getString(KEY_STATUS, "WAITING").orEmpty(),
             isRunning = prefs.getBoolean(KEY_IS_RUNNING, false),
-            connected = prefs.getBoolean(KEY_CONNECTED, false)
+            connected = prefs.getBoolean(KEY_CONNECTED, false),
+            savedAtMillis = prefs.getLong(KEY_SAVED_AT_MILLIS, System.currentTimeMillis()),
+            savedAtElapsedRealtime = prefs.getLong(KEY_SAVED_AT_ELAPSED_REALTIME, 0L)
         )
     }
 }
