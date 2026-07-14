@@ -102,7 +102,7 @@ fun RoomCard(
                 Text(
                     text = timeText,
                     color = timeColor,
-                    fontSize = 35.sp,
+                    fontSize = if (room.isMaintenance) 29.sp else 35.sp,
                     fontWeight = FontWeight.Bold
                 )
                 when {
@@ -111,9 +111,13 @@ fun RoomCard(
                         color = Color(0xFFB8C0C8),
                         fontSize = 12.sp
                     )
-                    room.status == RoomStatus.WAITING && connectedDisplays > 0 -> Text(
-                        text = "손님 기기 ${connectedDisplays}대 연결",
-                        color = Color(0xFF74C98C),
+                    room.status == RoomStatus.WAITING -> Text(
+                        text = if (connectedDisplays > 0) {
+                            "손님 기기 ${connectedDisplays}대 연결"
+                        } else {
+                            "시작 준비 완료"
+                        },
+                        color = if (connectedDisplays > 0) Color(0xFF74C98C) else Color(0xFFABB3BA),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium
                     )

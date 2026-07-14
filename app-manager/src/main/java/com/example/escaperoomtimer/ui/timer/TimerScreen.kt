@@ -144,7 +144,7 @@ fun TimerScreen(
         }
 
         Spacer(Modifier.height(24.dp))
-        StatusBadge(room.status, room.isRunning)
+        StatusBadge(room.status, room.isRunning, room.isMaintenance)
         Spacer(Modifier.height(14.dp))
 
         Text(
@@ -156,7 +156,7 @@ fun TimerScreen(
         Spacer(Modifier.height(4.dp))
         Text(
             text = formatTime(room.seconds),
-            color = timerColor(room.seconds, room.status),
+            color = timerColor(room.seconds, room.status, room.isMaintenance),
             fontSize = 78.sp,
             fontWeight = FontWeight.Bold
         )
@@ -214,7 +214,22 @@ fun TimerScreen(
 
         Spacer(Modifier.height(24.dp))
 
-        if (room.status != RoomStatus.FINISHED && room.seconds > 0) {
+        if (room.isMaintenance) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF174A6E), RoundedCornerShape(14.dp))
+                    .padding(vertical = 18.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "유지보수 중 · 타이머 시작이 잠겨 있습니다",
+                    color = Color(0xFF9ED8FF),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        } else if (room.status != RoomStatus.FINISHED && room.seconds > 0) {
             TimerButton(
                 text = when {
                     room.isRunning -> "Ⅱ 일시정지"
@@ -595,8 +610,8 @@ private fun UndoBar(
 }
 
 @Composable
-fun StatusBadge(status: RoomStatus, isRunning: Boolean) {
-    val label = when (status) {
+fun StatusBadge(status: RoomStatus, isRunning: Boolean, isMaintenance: Boolean = false) {
+    val label = if (isMaintenance) "유지보수" else when (status) {
         RoomStatus.WAITING -> "대기"
         RoomStatus.RUNNING -> "진행중"
         RoomStatus.WARNING -> if (isRunning) "5분 이하" else "일시정지"
@@ -604,7 +619,7 @@ fun StatusBadge(status: RoomStatus, isRunning: Boolean) {
         RoomStatus.FINISHED -> "종료"
     }
 
-    val color = when (status) {
+    val color = if (isMaintenance) Color(0xFF174A6E) else when (status) {
         RoomStatus.WAITING -> Color(0xFF555555)
         RoomStatus.RUNNING -> Color(0xFF0F4A1E)
         RoomStatus.WARNING -> Color(0xFF5A1C1C)
@@ -665,8 +680,9 @@ private fun formatClockTime(epochMillis: Long): String =
 private fun adjustmentLabel(seconds: Int): String =
     if (seconds < 60) "${seconds}초" else "${seconds / 60}분"
 
-fun timerColor(seconds: Int, status: RoomStatus): Color {
+fun timerColor(seconds: Int, status: RoomStatus, isMaintenance: Boolean = false): Color {
     return when {
+        isMaintenance -> Color(0xFF64B5F6)
         status == RoomStatus.FINISHED || seconds <= 0 -> Color(0xFFFF4B4B)
         seconds <= 5 * 60 -> Color(0xFFFF4B4B)
         seconds <= 10 * 60 -> Color(0xFFFFA726)
