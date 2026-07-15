@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
@@ -95,8 +96,9 @@ fun SettingScreen(
 
     var presetName by remember { mutableStateOf("") }
     var presetMinutes by remember { mutableStateOf("60") }
-    var presetEmoji by remember { mutableStateOf("🎭") }
     var editingPresetId by remember { mutableStateOf<String?>(null) }
+    var showPresetEditor by remember { mutableStateOf(false) }
+    var reorderPresets by remember { mutableStateOf(false) }
     var roomForPresetDialog by remember { mutableStateOf<RoomInfo?>(null) }
     var roomToDelete by remember { mutableStateOf<RoomInfo?>(null) }
     var showAddRoomDialog by remember { mutableStateOf(false) }
@@ -116,7 +118,15 @@ fun SettingScreen(
         editingPresetId = null
         presetName = ""
         presetMinutes = "60"
-        presetEmoji = "🎭"
+        showPresetEditor = false
+    }
+    fun movePreset(index: Int, direction: Int) {
+        val target = index + direction
+        if (index !in presets.indices || target !in presets.indices) return
+        val current = presets[index]
+        presets[index] = presets[target]
+        presets[target] = current
+        persistPresets()
     }
 
     LaunchedEffect(currentPage) {
@@ -164,14 +174,38 @@ fun SettingScreen(
                 SettingPage.WEB_PIN -> item { WebAdminPinSettingsSection() }
                 SettingPage.PRESETS -> {
                     item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    clearPresetEditor()
+                                    showPresetEditor = true
+                                    reorderPresets = false
+                                },
+                                modifier = Modifier.weight(1f).height(50.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C4DCE))
+                            ) { Text("+ 새 프리셋", fontWeight = FontWeight.Bold) }
+                            OutlinedButton(
+                                onClick = {
+                                    reorderPresets = !reorderPresets
+                                    if (reorderPresets) clearPresetEditor()
+                                },
+                                modifier = Modifier.weight(1f).height(50.dp),
+                                border = BorderStroke(1.dp, Color(0xFF9C6ADE))
+                            ) {
+                                Text(if (reorderPresets) "순서 변경 완료" else "순서 변경", color = Color(0xFFBF91EA))
+                            }
+                        }
+                    }
+                    if (showPresetEditor) item {
                         PresetEditorCard(
                             presetName = presetName,
                             presetMinutes = presetMinutes,
-                            presetEmoji = presetEmoji,
                             isEditing = editingPresetId != null,
                             onNameChange = { presetName = it },
                             onMinutesChange = { presetMinutes = it.filter(Char::isDigit).take(3) },
-                            onEmojiChange = { presetEmoji = it.take(4) },
                             onSave = {
                                 val cleanName = presetName.trim()
                                 val minutes = presetMinutes.toIntOrNull()?.coerceIn(1, 240)
@@ -184,7 +218,7 @@ fun SettingScreen(
                                     id = editingPresetId ?: UUID.randomUUID().toString(),
                                     name = cleanName,
                                     defaultMinutes = minutes,
-                                    emoji = presetEmoji.ifBlank { "🎭" }
+                                    emoji = presets.getOrNull(existingIndex)?.emoji ?: "🎭"
                                 )
                                 if (existingIndex >= 0) presets[existingIndex] = preset else presets.add(preset)
                                 persistPresets()
@@ -196,20 +230,25 @@ fun SettingScreen(
                     if (presets.isEmpty()) {
                         item { EmptyPresetCard() }
                     } else {
-                        items(presets, key = { it.id }) { preset ->
+                        itemsIndexed(presets, key = { _, preset -> preset.id }) { index, preset ->
                             PresetCard(
                                 preset = preset,
+                                ordering = reorderPresets,
+                                canMoveUp = index > 0,
+                                canMoveDown = index < presets.lastIndex,
                                 onEdit = {
                                     editingPresetId = preset.id
                                     presetName = preset.name
                                     presetMinutes = preset.defaultMinutes.toString()
-                                    presetEmoji = preset.emoji
+                                    showPresetEditor = true
                                 },
                                 onDelete = {
                                     presets.removeAll { it.id == preset.id }
                                     persistPresets()
                                     if (editingPresetId == preset.id) clearPresetEditor()
-                                }
+                                },
+                                onMoveUp = { movePreset(index, -1) },
+                                onMoveDown = { movePreset(index, 1) }
                             )
                         }
                     }
@@ -279,7 +318,7 @@ fun SettingScreen(
                                 roomForPresetDialog = null
                             },
                             modifier = Modifier.fillMaxWidth()
-                        ) { Text("${preset.emoji} ${preset.name} · ${preset.defaultMinutes}분") }
+                        ) { Text("${preset.name} · ${preset.defaultMinutes}분") }
                     }
                 }
             },
@@ -538,11 +577,9 @@ private fun ServerInfoRow(label: String, value: String, valueColor: Color) {
 private fun PresetEditorCard(
     presetName: String,
     presetMinutes: String,
-    presetEmoji: String,
     isEditing: Boolean,
     onNameChange: (String) -> Unit,
     onMinutesChange: (String) -> Unit,
-    onEmojiChange: (String) -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit
 ) {
@@ -552,12 +589,15 @@ private fun PresetEditorCard(
         colors = CardDefaults.cardColors(containerColor = Color(0xFF171C20))
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
-            Text(if (isEditing) "프리셋 수정" else "새 프리셋 추가", color = Color(0xFFFFB000), fontWeight = FontWeight.Bold)
+            Text(if (isEditing) "프리셋 수정" else "새 프리셋 추가", color = Color(0xFFBF91EA), fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = presetEmoji, onValueChange = onEmojiChange, modifier = Modifier.weight(0.28f), singleLine = true, label = { Text("아이콘") })
-                OutlinedTextField(value = presetName, onValueChange = onNameChange, modifier = Modifier.weight(0.72f), singleLine = true, label = { Text("테마 이름") })
-            }
+            OutlinedTextField(
+                value = presetName,
+                onValueChange = onNameChange,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("테마 이름") }
+            )
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = presetMinutes,
@@ -569,29 +609,51 @@ private fun PresetEditorCard(
             )
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onSave, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF7A00))) {
+                Button(onClick = onSave, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C4DCE))) {
                     Text(if (isEditing) "수정 저장" else "프리셋 추가")
                 }
-                if (isEditing) OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("취소") }
+                OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) {
+                    Text(if (isEditing) "취소" else "닫기")
+                }
             }
         }
     }
 }
 
 @Composable
-private fun PresetCard(preset: ThemePreset, onEdit: () -> Unit, onDelete: () -> Unit) {
+private fun PresetCard(
+    preset: ThemePreset,
+    ordering: Boolean,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, Color(0xFF343C44)),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF171C20))
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Text("${preset.emoji} ${preset.name}", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-            Text("기본 ${preset.defaultMinutes}분", color = Color(0xFF9AA3AC), fontSize = 13.sp)
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onEdit, modifier = Modifier.weight(1f)) { Text("수정") }
-                OutlinedButton(onClick = onDelete, modifier = Modifier.weight(1f)) { Text("삭제", color = Color(0xFFFF6B6B)) }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(preset.name, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Text("기본 ${preset.defaultMinutes}분", color = Color(0xFF9AA3AC), fontSize = 13.sp)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (ordering) {
+                    OutlinedButton(onClick = onMoveUp, enabled = canMoveUp) { Text("↑ 위") }
+                    OutlinedButton(onClick = onMoveDown, enabled = canMoveDown) { Text("↓ 아래") }
+                } else {
+                    OutlinedButton(onClick = onEdit) { Text("수정") }
+                    TextButton(onClick = onDelete) { Text("삭제", color = Color(0xFFFF6B6B)) }
+                }
             }
         }
     }
