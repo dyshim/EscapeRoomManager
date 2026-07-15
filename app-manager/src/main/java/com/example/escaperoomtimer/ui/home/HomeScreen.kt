@@ -1,6 +1,5 @@
 package com.example.escaperoomtimer.ui.home
 
-import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -19,14 +18,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -42,11 +37,11 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.escaperoomtimer.model.RoomInfo
 import com.example.escaperoomtimer.network.ManagerTcpServer
+import com.example.escaperoomtimer.ui.common.AddRoomDialog
 import com.example.escaperoomtimer.util.localIpv4Address
 import com.example.escaperoomtimer.util.nowText
 import com.example.escaperoomtimer.web.ManagerWebServer
@@ -62,8 +57,6 @@ fun HomeScreen(
     val context = LocalContext.current
     var currentTime by remember { mutableStateOf(nowText()) }
     var showAddDialog by remember { mutableStateOf(false) }
-    var roomName by remember { mutableStateOf("") }
-    var roomMinutes by remember { mutableStateOf("60") }
     var localIp by remember { mutableStateOf(localIpv4Address()) }
     var webServerStatus by remember { mutableStateOf(ManagerWebServer.statusText()) }
     val uiPreferences = remember {
@@ -194,8 +187,6 @@ fun HomeScreen(
 
         Button(
             onClick = {
-                roomName = "ROOM ${rooms.size + 1}"
-                roomMinutes = "60"
                 showAddDialog = true
             },
             modifier = Modifier.fillMaxWidth().height(54.dp),
@@ -215,42 +206,12 @@ fun HomeScreen(
     }
 
     if (showAddDialog) {
-        AlertDialog(
-            onDismissRequest = { showAddDialog = false },
-            title = { Text("새 방 추가") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = roomName,
-                        onValueChange = { roomName = it },
-                        label = { Text("방 이름") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = roomMinutes,
-                        onValueChange = { roomMinutes = it.filter(Char::isDigit).take(3) },
-                        label = { Text("기본 시간(분)") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val minutes = roomMinutes.toIntOrNull()?.coerceIn(1, 240)
-                    if (roomName.trim().isBlank() || minutes == null) {
-                        Toast.makeText(context, "방 이름과 시간을 확인해 주세요.", Toast.LENGTH_SHORT).show()
-                    } else {
-                        onAddRoom(roomName, minutes)
-                        showAddDialog = false
-                        Toast.makeText(context, "${roomName.trim()} 추가 완료", Toast.LENGTH_SHORT).show()
-                    }
-                }) { Text("추가") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAddDialog = false }) { Text("취소") }
+        AddRoomDialog(
+            suggestedName = "ROOM ${rooms.size + 1}",
+            onDismiss = { showAddDialog = false },
+            onConfirm = { name, minutes ->
+                onAddRoom(name, minutes)
+                showAddDialog = false
             }
         )
     }

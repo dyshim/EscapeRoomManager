@@ -1,9 +1,12 @@
 package com.example.escaperoomtimer.ui.setting
 
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,6 +41,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -45,9 +52,25 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.escaperoomtimer.model.RoomInfo
 import com.example.escaperoomtimer.model.ThemePreset
+import com.example.escaperoomtimer.network.ManagerTcpServer
 import com.example.escaperoomtimer.repository.ThemePresetRepository
 import com.example.escaperoomtimer.settings.WebAdminPinPreferences
+import com.example.escaperoomtimer.ui.common.AddRoomDialog
+import com.example.escaperoomtimer.util.localIpv4Address
+import com.example.escaperoomtimer.web.ManagerWebServer
 import java.util.UUID
+import kotlinx.coroutines.delay
+
+private enum class SettingPage(val title: String, val subtitle: String) {
+    MENU("설정", "매장 운영 옵션을 관리합니다."),
+    ALARM("알림 및 소리", "타이머 종료 알림을 설정합니다."),
+    WEB_PIN("웹 관리자 PIN", "PC 웹 로그인 PIN을 관리합니다."),
+    PRESETS("테마 프리셋", "방 이름과 기본 시간 조합을 관리합니다."),
+    ROOMS("방 관리", "방의 사용 여부와 기본 설정을 관리합니다."),
+    SERVER("서버 및 연결", "손님용 TCP와 웹 서버 상태를 확인합니다.")
+}
+
+private enum class SettingIcon { BELL, SHIELD, PALETTE, DOOR, SERVER }
 
 @Composable
 fun SettingScreen(
@@ -66,6 +89,9 @@ fun SettingScreen(
     val presets = remember {
         mutableStateListOf<ThemePreset>().apply { addAll(ThemePresetRepository.load(context)) }
     }
+    var currentPage by remember { mutableStateOf(SettingPage.MENU) }
+    var localIp by remember { mutableStateOf(localIpv4Address()) }
+    var webServerStatus by remember { mutableStateOf(ManagerWebServer.statusText()) }
 
     var presetName by remember { mutableStateOf("") }
     var presetMinutes by remember { mutableStateOf("60") }
@@ -74,8 +100,6 @@ fun SettingScreen(
     var roomForPresetDialog by remember { mutableStateOf<RoomInfo?>(null) }
     var roomToDelete by remember { mutableStateOf<RoomInfo?>(null) }
     var showAddRoomDialog by remember { mutableStateOf(false) }
-    var newRoomName by remember { mutableStateOf("") }
-    var newRoomMinutes by remember { mutableStateOf("60") }
 
     LaunchedEffect(rooms.map { it.id to it.name }) {
         rooms.forEach { room ->
@@ -95,21 +119,28 @@ fun SettingScreen(
         presetEmoji = "🎭"
     }
 
+    LaunchedEffect(currentPage) {
+        if (currentPage == SettingPage.SERVER) {
+            while (true) {
+                localIp = localIpv4Address()
+                webServerStatus = ManagerWebServer.statusText()
+                delay(1000)
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF0B0F12))
             .padding(18.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("←", color = Color.White, fontSize = 28.sp, modifier = Modifier.clickable(onClick = onBack))
-            Text("방·테마 설정", color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Bold)
-            Text("", fontSize = 15.sp)
-        }
+        SettingTopBar(
+            page = currentPage,
+            onBack = {
+                if (currentPage == SettingPage.MENU) onBack() else currentPage = SettingPage.MENU
+            }
+        )
 
         Spacer(Modifier.height(14.dp))
         HorizontalDivider(color = Color(0xFF2A2F35))
@@ -119,127 +150,116 @@ fun SettingScreen(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            item { ManagerAlarmSettingsSection() }
-            item { WebAdminPinSettingsSection() }
-
-            item {
-                Text("테마 프리셋", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
-                Text("테마 이름과 기본 시간을 저장해 방에 빠르게 적용할 수 있어요.", color = Color(0xFF8D96A0), fontSize = 13.sp)
-            }
-
-            item {
-                PresetEditorCard(
-                    presetName = presetName,
-                    presetMinutes = presetMinutes,
-                    presetEmoji = presetEmoji,
-                    isEditing = editingPresetId != null,
-                    onNameChange = { presetName = it },
-                    onMinutesChange = { presetMinutes = it.filter(Char::isDigit).take(3) },
-                    onEmojiChange = { presetEmoji = it.take(4) },
-                    onSave = {
-                        val cleanName = presetName.trim()
-                        val minutes = presetMinutes.toIntOrNull()?.coerceIn(1, 240)
-                        if (cleanName.isBlank() || minutes == null) {
-                            Toast.makeText(context, "테마 이름과 시간을 확인해 주세요.", Toast.LENGTH_SHORT).show()
-                            return@PresetEditorCard
-                        }
-                        val existingIndex = presets.indexOfFirst { it.id == editingPresetId }
-                        val preset = ThemePreset(
-                            id = editingPresetId ?: UUID.randomUUID().toString(),
-                            name = cleanName,
-                            defaultMinutes = minutes,
-                            emoji = presetEmoji.ifBlank { "🎭" }
+            when (currentPage) {
+                SettingPage.MENU -> {
+                    item {
+                        SettingsMenu(
+                            presetCount = presets.size,
+                            roomCount = rooms.size,
+                            onPageSelected = { currentPage = it }
                         )
-                        if (existingIndex >= 0) presets[existingIndex] = preset else presets.add(preset)
-                        persistPresets()
-                        clearPresetEditor()
-                    },
-                    onCancel = ::clearPresetEditor
-                )
-            }
-
-            if (presets.isEmpty()) {
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF171C20)),
-                        shape = RoundedCornerShape(14.dp)
-                    ) {
-                        Text("아직 저장된 테마 프리셋이 없어요.", color = Color(0xFF9AA3AC), modifier = Modifier.padding(16.dp))
                     }
                 }
-            } else {
-                items(presets, key = { it.id }) { preset ->
-                    PresetCard(
-                        preset = preset,
-                        onEdit = {
-                            editingPresetId = preset.id
-                            presetName = preset.name
-                            presetMinutes = preset.defaultMinutes.toString()
-                            presetEmoji = preset.emoji
-                        },
-                        onDelete = {
-                            presets.removeAll { it.id == preset.id }
-                            persistPresets()
-                            if (editingPresetId == preset.id) clearPresetEditor()
-                        }
-                    )
-                }
-            }
-
-            item {
-                Spacer(Modifier.height(4.dp))
-                HorizontalDivider(color = Color(0xFF2A2F35))
-                Spacer(Modifier.height(4.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text("방 관리", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
-                        Text("사용 여부, 순서, 이름과 기본 시간을 관리합니다.", color = Color(0xFF8D96A0), fontSize = 12.sp)
+                SettingPage.ALARM -> item { ManagerAlarmSettingsSection() }
+                SettingPage.WEB_PIN -> item { WebAdminPinSettingsSection() }
+                SettingPage.PRESETS -> {
+                    item {
+                        PresetEditorCard(
+                            presetName = presetName,
+                            presetMinutes = presetMinutes,
+                            presetEmoji = presetEmoji,
+                            isEditing = editingPresetId != null,
+                            onNameChange = { presetName = it },
+                            onMinutesChange = { presetMinutes = it.filter(Char::isDigit).take(3) },
+                            onEmojiChange = { presetEmoji = it.take(4) },
+                            onSave = {
+                                val cleanName = presetName.trim()
+                                val minutes = presetMinutes.toIntOrNull()?.coerceIn(1, 240)
+                                if (cleanName.isBlank() || minutes == null) {
+                                    Toast.makeText(context, "테마 이름과 시간을 확인해 주세요.", Toast.LENGTH_SHORT).show()
+                                    return@PresetEditorCard
+                                }
+                                val existingIndex = presets.indexOfFirst { it.id == editingPresetId }
+                                val preset = ThemePreset(
+                                    id = editingPresetId ?: UUID.randomUUID().toString(),
+                                    name = cleanName,
+                                    defaultMinutes = minutes,
+                                    emoji = presetEmoji.ifBlank { "🎭" }
+                                )
+                                if (existingIndex >= 0) presets[existingIndex] = preset else presets.add(preset)
+                                persistPresets()
+                                clearPresetEditor()
+                            },
+                            onCancel = ::clearPresetEditor
+                        )
                     }
-                    Button(
-                        onClick = {
-                            newRoomName = "ROOM ${rooms.size + 1}"
-                            newRoomMinutes = "60"
-                            showAddRoomDialog = true
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF7A00))
-                    ) { Text("+ 추가") }
+                    if (presets.isEmpty()) {
+                        item { EmptyPresetCard() }
+                    } else {
+                        items(presets, key = { it.id }) { preset ->
+                            PresetCard(
+                                preset = preset,
+                                onEdit = {
+                                    editingPresetId = preset.id
+                                    presetName = preset.name
+                                    presetMinutes = preset.defaultMinutes.toString()
+                                    presetEmoji = preset.emoji
+                                },
+                                onDelete = {
+                                    presets.removeAll { it.id == preset.id }
+                                    persistPresets()
+                                    if (editingPresetId == preset.id) clearPresetEditor()
+                                }
+                            )
+                        }
+                    }
                 }
-            }
-
-            items(rooms, key = { it.id }) { room ->
-                RoomSettingCard(
-                    room = room,
-                    nameValue = nameInputs[room.id] ?: room.name,
-                    minutesValue = minuteInputs[room.id] ?: room.defaultMinutes.toString(),
-                    hasPresets = presets.isNotEmpty(),
-                    onNameChange = { nameInputs[room.id] = it },
-                    onMinutesChange = { minuteInputs[room.id] = it.filter(Char::isDigit).take(3) },
-                    onChoosePreset = { roomForPresetDialog = room },
-                    onSave = {
-                        val minutes = minuteInputs[room.id]?.toIntOrNull() ?: room.defaultMinutes
-                        val name = nameInputs[room.id] ?: room.name
-                        onSaveRoom(room.id, name, minutes)
-                        Toast.makeText(context, "${name.trim()} 저장 완료", Toast.LENGTH_SHORT).show()
-                    },
-                    onEnabledChange = { enabled ->
-                        if (!onSetRoomEnabled(room.id, enabled)) {
-                            Toast.makeText(context, "진행 중인 방은 비활성화할 수 없습니다.", Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                    onMaintenanceChange = { maintenance ->
-                        if (!onSetMaintenance(room.id, maintenance)) {
-                            Toast.makeText(context, "진행 중인 방은 유지보수로 전환할 수 없습니다.", Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                    onMoveUp = { onMoveRoom(room.id, -1) },
-                    onMoveDown = { onMoveRoom(room.id, 1) },
-                    onDelete = { roomToDelete = room }
-                )
+                SettingPage.ROOMS -> {
+                    item {
+                        Button(
+                            onClick = { showAddRoomDialog = true },
+                            modifier = Modifier.fillMaxWidth().height(52.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF74C98C),
+                                contentColor = Color(0xFF07130B)
+                            )
+                        ) { Text("+ 새 방 추가", fontWeight = FontWeight.Bold) }
+                    }
+                    items(rooms, key = { it.id }) { room ->
+                        RoomSettingCard(
+                            room = room,
+                            nameValue = nameInputs[room.id] ?: room.name,
+                            minutesValue = minuteInputs[room.id] ?: room.defaultMinutes.toString(),
+                            hasPresets = presets.isNotEmpty(),
+                            onNameChange = { nameInputs[room.id] = it },
+                            onMinutesChange = { minuteInputs[room.id] = it.filter(Char::isDigit).take(3) },
+                            onChoosePreset = { roomForPresetDialog = room },
+                            onSave = {
+                                val minutes = minuteInputs[room.id]?.toIntOrNull() ?: room.defaultMinutes
+                                val name = nameInputs[room.id] ?: room.name
+                                onSaveRoom(room.id, name, minutes)
+                                Toast.makeText(context, "${name.trim()} 저장 완료", Toast.LENGTH_SHORT).show()
+                            },
+                            onEnabledChange = { enabled ->
+                                if (!onSetRoomEnabled(room.id, enabled)) {
+                                    Toast.makeText(context, "진행 중인 방은 비활성화할 수 없습니다.", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            onMaintenanceChange = { maintenance ->
+                                if (!onSetMaintenance(room.id, maintenance)) {
+                                    Toast.makeText(context, "진행 중인 방은 유지보수로 전환할 수 없습니다.", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            onMoveUp = { onMoveRoom(room.id, -1) },
+                            onMoveDown = { onMoveRoom(room.id, 1) },
+                            onDelete = { roomToDelete = room }
+                        )
+                    }
+                }
+                SettingPage.SERVER -> item {
+                    ServerConnectionCard(localIp = localIp, webServerStatus = webServerStatus)
+                }
             }
         }
     }
@@ -287,41 +307,230 @@ fun SettingScreen(
     }
 
     if (showAddRoomDialog) {
-        AlertDialog(
-            onDismissRequest = { showAddRoomDialog = false },
-            title = { Text("새 방 추가") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(
-                        value = newRoomName,
-                        onValueChange = { newRoomName = it },
-                        label = { Text("방 이름") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = newRoomMinutes,
-                        onValueChange = { newRoomMinutes = it.filter(Char::isDigit).take(3) },
-                        label = { Text("기본 시간(분)") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val minutes = newRoomMinutes.toIntOrNull()?.coerceIn(1, 240)
-                    if (newRoomName.trim().isBlank() || minutes == null) {
-                        Toast.makeText(context, "방 이름과 시간을 확인해 주세요.", Toast.LENGTH_SHORT).show()
-                    } else {
-                        onAddRoom(newRoomName, minutes)
-                        showAddRoomDialog = false
-                    }
-                }) { Text("추가") }
-            },
-            dismissButton = { TextButton(onClick = { showAddRoomDialog = false }) { Text("취소") } }
+        AddRoomDialog(
+            suggestedName = "ROOM ${rooms.size + 1}",
+            onDismiss = { showAddRoomDialog = false },
+            onConfirm = { name, minutes ->
+                onAddRoom(name, minutes)
+                showAddRoomDialog = false
+            }
         )
+    }
+}
+
+@Composable
+private fun SettingTopBar(page: SettingPage, onBack: () -> Unit) {
+    Box(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            "←",
+            color = Color.White,
+            fontSize = 28.sp,
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .clickable(onClick = onBack)
+                .padding(horizontal = 4.dp)
+        )
+        Column(
+            modifier = Modifier.align(Alignment.Center),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(page.title, color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Bold)
+            Text(page.subtitle, color = Color(0xFF8D96A0), fontSize = 12.sp)
+        }
+    }
+}
+
+@Composable
+private fun SettingsMenu(
+    presetCount: Int,
+    roomCount: Int,
+    onPageSelected: (SettingPage) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        SettingMenuCard(
+            title = "알림 및 소리",
+            description = "타이머 종료 알림과 소리를 설정합니다.",
+            color = Color(0xFFF0BD55),
+            icon = SettingIcon.BELL,
+            onClick = { onPageSelected(SettingPage.ALARM) }
+        )
+        SettingMenuCard(
+            title = "웹 관리자 PIN",
+            description = "PC 웹 로그인 PIN을 변경합니다.",
+            color = Color(0xFF75B8F3),
+            icon = SettingIcon.SHIELD,
+            badge = "설정됨",
+            onClick = { onPageSelected(SettingPage.WEB_PIN) }
+        )
+        SettingMenuCard(
+            title = "테마 프리셋",
+            description = "저장된 테마와 기본 시간을 관리합니다.",
+            color = Color(0xFFBF91EA),
+            icon = SettingIcon.PALETTE,
+            badge = "${presetCount}개",
+            onClick = { onPageSelected(SettingPage.PRESETS) }
+        )
+        SettingMenuCard(
+            title = "방 관리",
+            description = "방 이름, 시간과 사용 여부를 관리합니다.",
+            color = Color(0xFF79D892),
+            icon = SettingIcon.DOOR,
+            badge = "${roomCount}개",
+            onClick = { onPageSelected(SettingPage.ROOMS) }
+        )
+        SettingMenuCard(
+            title = "서버 및 연결",
+            description = "손님용 TCP와 웹 서버 정보를 확인합니다.",
+            color = Color(0xFF73D5C8),
+            icon = SettingIcon.SERVER,
+            onClick = { onPageSelected(SettingPage.SERVER) }
+        )
+        Text(
+            "EscapeRoom Suite · 직원용",
+            color = Color(0xFF727A82),
+            fontSize = 12.sp,
+            modifier = Modifier.align(Alignment.CenterHorizontally).padding(vertical = 12.dp)
+        )
+    }
+}
+
+@Composable
+private fun SettingMenuCard(
+    title: String,
+    description: String,
+    color: Color,
+    icon: SettingIcon,
+    badge: String? = null,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, Color(0xFF3A4650)),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF151B20))
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 17.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SettingMenuIcon(icon = icon, color = color)
+            Column(modifier = Modifier.weight(1f).padding(start = 18.dp)) {
+                Text(title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(3.dp))
+                Text(description, color = Color(0xFFB2BAC2), fontSize = 12.sp, maxLines = 1)
+            }
+            badge?.let {
+                Text(
+                    text = it,
+                    color = color,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .background(color.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 8.dp, vertical = 5.dp)
+                )
+            }
+            Text("›", color = Color.White, fontSize = 30.sp, modifier = Modifier.padding(start = 10.dp))
+        }
+    }
+}
+
+@Composable
+private fun SettingMenuIcon(icon: SettingIcon, color: Color) {
+    Canvas(modifier = Modifier.size(48.dp)) {
+        val stroke = Stroke(width = 2.2.dp.toPx(), cap = StrokeCap.Round)
+        val w = size.width
+        val h = size.height
+        when (icon) {
+            SettingIcon.BELL -> {
+                val bell = Path().apply {
+                    moveTo(w * .25f, h * .68f)
+                    lineTo(w * .34f, h * .55f)
+                    lineTo(w * .34f, h * .36f)
+                    cubicTo(w * .34f, h * .18f, w * .66f, h * .18f, w * .66f, h * .36f)
+                    lineTo(w * .66f, h * .55f)
+                    lineTo(w * .75f, h * .68f)
+                    close()
+                }
+                drawPath(bell, color, style = stroke)
+                drawLine(color, start = androidx.compose.ui.geometry.Offset(w * .44f, h * .75f), end = androidx.compose.ui.geometry.Offset(w * .56f, h * .75f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+            }
+            SettingIcon.SHIELD -> {
+                val shield = Path().apply {
+                    moveTo(w * .5f, h * .14f)
+                    lineTo(w * .76f, h * .25f)
+                    lineTo(w * .72f, h * .58f)
+                    cubicTo(w * .68f, h * .75f, w * .56f, h * .82f, w * .5f, h * .85f)
+                    cubicTo(w * .44f, h * .82f, w * .32f, h * .75f, w * .28f, h * .58f)
+                    lineTo(w * .24f, h * .25f)
+                    close()
+                }
+                drawPath(shield, color, style = stroke)
+                drawRoundRect(color, topLeft = androidx.compose.ui.geometry.Offset(w * .40f, h * .43f), size = androidx.compose.ui.geometry.Size(w * .20f, h * .20f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * .03f), style = stroke)
+            }
+            SettingIcon.PALETTE -> {
+                drawCircle(color, radius = w * .31f, center = center, style = stroke)
+                drawCircle(Color(0xFF151B20), radius = w * .10f, center = androidx.compose.ui.geometry.Offset(w * .69f, h * .67f))
+                listOf(.35f to .35f, .55f to .28f, .30f to .55f).forEach { (x, y) ->
+                    drawCircle(color, radius = w * .035f, center = androidx.compose.ui.geometry.Offset(w * x, h * y))
+                }
+            }
+            SettingIcon.DOOR -> {
+                drawRect(color, topLeft = androidx.compose.ui.geometry.Offset(w * .30f, h * .18f), size = androidx.compose.ui.geometry.Size(w * .42f, h * .65f), style = stroke)
+                drawLine(color, androidx.compose.ui.geometry.Offset(w * .30f, h * .18f), androidx.compose.ui.geometry.Offset(w * .56f, h * .27f), stroke.width, StrokeCap.Round)
+                drawLine(color, androidx.compose.ui.geometry.Offset(w * .56f, h * .27f), androidx.compose.ui.geometry.Offset(w * .56f, h * .77f), stroke.width, StrokeCap.Round)
+                drawCircle(color, radius = w * .025f, center = androidx.compose.ui.geometry.Offset(w * .50f, h * .53f))
+            }
+            SettingIcon.SERVER -> {
+                repeat(3) { index ->
+                    val top = h * (.20f + index * .22f)
+                    drawRoundRect(color, topLeft = androidx.compose.ui.geometry.Offset(w * .24f, top), size = androidx.compose.ui.geometry.Size(w * .52f, h * .16f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * .04f), style = stroke)
+                    drawCircle(color, radius = w * .022f, center = androidx.compose.ui.geometry.Offset(w * .32f, top + h * .08f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyPresetCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF171C20)),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Text("아직 저장된 테마 프리셋이 없어요.", color = Color(0xFF9AA3AC), modifier = Modifier.padding(16.dp))
+    }
+}
+
+@Composable
+private fun ServerConnectionCard(localIp: String, webServerStatus: String) {
+    val guestCount = ManagerTcpServer.connectedDisplayCounts.values.sum()
+    val validIp = localIp != "IP 확인 불가"
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, Color(0xFF31554F)),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF151B20))
+    ) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("현재 서버 상태", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+            Text("주소는 확인용이며 이 화면에서는 변경할 수 없습니다.", color = Color(0xFF9AA3AC), fontSize = 13.sp)
+            HorizontalDivider(color = Color(0xFF344048))
+            ServerInfoRow("Wi-Fi", if (validIp) "연결됨" else "연결 안 됨", if (validIp) Color(0xFF79D892) else Color(0xFFE57373))
+            ServerInfoRow("손님용 TCP", if (validIp) "$localIp:45991" else "주소 확인 불가", Color(0xFF73D5C8))
+            ServerInfoRow("웹 대시보드", if (validIp) "http://$localIp:${ManagerWebServer.PORT}" else "주소 확인 불가", Color(0xFF75B8F3))
+            ServerInfoRow("연결 기기", "손님 ${guestCount}대 · 웹 ${ManagerWebServer.connectedWebCount}대", Color.White)
+            ServerInfoRow("웹 서버", webServerStatus, if (ManagerWebServer.isRunning) Color(0xFF79D892) else Color(0xFFF0BD55))
+        }
+    }
+}
+
+@Composable
+private fun ServerInfoRow(label: String, value: String, valueColor: Color) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = Color(0xFFAAB2BA), fontSize = 13.sp)
+        Text(value, color = valueColor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
