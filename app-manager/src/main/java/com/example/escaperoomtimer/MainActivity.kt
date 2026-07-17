@@ -89,7 +89,8 @@ fun EscapeRoomManagerApp() {
             onSetMaintenance = TimerManager::setMaintenance,
             onDeleteRoom = TimerManager::deleteRoom,
             onMoveRoom = TimerManager::moveRoom,
-            onAddRoom = TimerManager::addRoom
+            onAddRoom = TimerManager::addRoom,
+            onRestoreRooms = TimerManager::restoreConfiguration
         )
 
         ScreenMode.STAFF_TIMER -> {

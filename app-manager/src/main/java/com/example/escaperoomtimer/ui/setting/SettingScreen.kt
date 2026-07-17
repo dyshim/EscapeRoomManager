@@ -1,6 +1,8 @@
 package com.example.escaperoomtimer.ui.setting
 
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -57,6 +59,10 @@ import com.example.escaperoomtimer.model.RoomInfo
 import com.example.escaperoomtimer.model.ThemePreset
 import com.example.escaperoomtimer.network.ManagerTcpServer
 import com.example.escaperoomtimer.repository.ThemePresetRepository
+import com.example.escaperoomtimer.settings.ManagerAlarmPreferences
+import com.example.escaperoomtimer.settings.BackupHistoryItem
+import com.example.escaperoomtimer.settings.ManagerBackup
+import com.example.escaperoomtimer.settings.ManagerBackupManager
 import com.example.escaperoomtimer.settings.StoreInfo
 import com.example.escaperoomtimer.settings.StoreInfoPreferences
 import com.example.escaperoomtimer.settings.WebAdminPinPreferences
@@ -78,10 +84,13 @@ private enum class SettingPage(val title: String, val subtitle: String) {
     WEB_PIN("웹 관리자 PIN", "PC 웹 로그인 PIN을 관리합니다."),
     PRESETS("테마 프리셋", "테마 이름과 기본 시간 조합을 관리합니다."),
     ROOMS("테마 관리", "테마의 사용 여부와 기본 설정을 관리합니다."),
+    BACKUP("백업 및 복원", "직원용 앱의 설정을 저장하거나 다시 불러옵니다."),
+    BACKUP_CREATE("설정 백업", "현재 저장된 설정을 하나의 백업 파일로 만듭니다."),
+    BACKUP_RESTORE("설정 복원", "백업 파일을 확인한 뒤 설정을 복원합니다."),
     SERVER("서버 및 연결", "손님용 TCP와 웹 서버 상태를 확인합니다.")
 }
 
-private enum class SettingIcon { STORE, BELL, SHIELD, PALETTE, DOOR, SERVER }
+private enum class SettingIcon { STORE, BELL, SHIELD, PALETTE, DOOR, BACKUP, SERVER }
 
 @Composable
 fun SettingScreen(
@@ -92,7 +101,8 @@ fun SettingScreen(
     onSetMaintenance: (roomId: String, maintenance: Boolean) -> Boolean,
     onDeleteRoom: (roomId: String) -> Boolean,
     onMoveRoom: (roomId: String, direction: Int) -> Boolean,
-    onAddRoom: (name: String, defaultMinutes: Int) -> String
+    onAddRoom: (name: String, defaultMinutes: Int) -> String,
+    onRestoreRooms: (List<RoomInfo>) -> Boolean
 ) {
     val context = LocalContext.current
     val nameInputs = remember { mutableStateMapOf<String, String>() }
@@ -107,6 +117,11 @@ fun SettingScreen(
     var storeInfoSaved by remember { mutableStateOf(false) }
     var showDiscardStoreChanges by remember { mutableStateOf(false) }
     var showResetStoreInfo by remember { mutableStateOf(false) }
+    var pendingRestore by remember { mutableStateOf<ManagerBackup?>(null) }
+    var showRestoreConfirmation by remember { mutableStateOf(false) }
+    var backupHistory by remember { mutableStateOf(ManagerBackupManager.history(context)) }
+    var backupMessage by remember { mutableStateOf<String?>(null) }
+    var backupError by remember { mutableStateOf<String?>(null) }
     var localIp by remember { mutableStateOf(localIpv4Address()) }
     var webServerStatus by remember { mutableStateOf(ManagerWebServer.statusText()) }
 
@@ -122,6 +137,61 @@ fun SettingScreen(
     var showAddRoomDialog by remember { mutableStateOf(false) }
     val storeInfoChanged = storeName.trim() != savedStoreInfo.storeName ||
         branchName.trim() != savedStoreInfo.branchName
+    val backupFileName = remember(savedStoreInfo) {
+        val storePart = listOf(savedStoreInfo.storeName, savedStoreInfo.branchName)
+            .filter { it.isNotBlank() }
+            .joinToString("_")
+            .replace(Regex("[^가-힣A-Za-z0-9_-]"), "_")
+            .trim('_')
+        val stamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.KOREA).format(Date())
+        if (storePart.isBlank()) "EscapeRoom_Backup_$stamp.ers" else "EscapeRoom_${storePart}_$stamp.ers"
+    }
+    val createBackupLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        if (uri != null) runCatching {
+            ManagerBackupManager.write(
+                context,
+                uri,
+                ManagerBackup(
+                    createdAtEpochMillis = System.currentTimeMillis(),
+                    storeInfo = StoreInfoPreferences.load(context),
+                    rooms = rooms,
+                    presets = presets.toList(),
+                    alarmSettings = ManagerAlarmPreferences.load(context)
+                )
+            )
+        }.onSuccess {
+            val currentBackup = ManagerBackup(
+                createdAtEpochMillis = System.currentTimeMillis(),
+                storeInfo = StoreInfoPreferences.load(context),
+                rooms = rooms,
+                presets = presets.toList(),
+                alarmSettings = ManagerAlarmPreferences.load(context)
+            )
+            ManagerBackupManager.saveInternal(context, backupFileName, currentBackup)
+            backupHistory = ManagerBackupManager.history(context)
+            backupError = null
+            backupMessage = "백업 파일이 저장되었습니다."
+        }.onFailure {
+            backupMessage = null
+            backupError = it.message ?: "백업 파일을 저장하지 못했습니다."
+        }
+    }
+    val openBackupLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) runCatching { ManagerBackupManager.read(context, uri) }
+            .onSuccess {
+                backupError = null
+                pendingRestore = it
+                currentPage = SettingPage.BACKUP_RESTORE
+            }
+            .onFailure {
+                backupMessage = null
+                backupError = it.message ?: "백업 파일을 읽지 못했습니다."
+            }
+    }
 
     LaunchedEffect(rooms.map { it.id to it.name }) {
         rooms.forEach { room ->
@@ -171,6 +241,7 @@ fun SettingScreen(
                 when {
                     currentPage == SettingPage.MENU -> onBack()
                     currentPage == SettingPage.STORE && storeInfoChanged -> showDiscardStoreChanges = true
+                    currentPage == SettingPage.BACKUP_CREATE || currentPage == SettingPage.BACKUP_RESTORE -> currentPage = SettingPage.BACKUP
                     currentPage == SettingPage.ROOMS && selectedRoomId != null -> selectedRoomId = null
                     else -> currentPage = SettingPage.MENU
                 }
@@ -219,6 +290,51 @@ fun SettingScreen(
                             storeInfoSaved = true
                         },
                         onReset = { showResetStoreInfo = true }
+                    )
+                }
+                SettingPage.BACKUP -> item {
+                    BackupRestoreHomeSection(
+                        history = backupHistory,
+                        onCreateBackup = { currentPage = SettingPage.BACKUP_CREATE },
+                        onChooseRestore = {
+                            backupMessage = null
+                            backupError = null
+                            openBackupLauncher.launch(arrayOf("application/json", "application/octet-stream", "text/plain"))
+                        },
+                        onHistorySelected = { item ->
+                            runCatching { ManagerBackupManager.readInternal(context, item.fileName) }
+                                .onSuccess {
+                                    pendingRestore = it
+                                    currentPage = SettingPage.BACKUP_RESTORE
+                                }
+                                .onFailure { backupError = it.message }
+                        }
+                    )
+                }
+                SettingPage.BACKUP_CREATE -> item {
+                    BackupCreateSettingsSection(
+                        fileName = backupFileName,
+                        restoreEnabled = rooms.none { it.isRunning },
+                        message = backupMessage,
+                        error = backupError,
+                        onCreateBackup = {
+                            backupMessage = null
+                            backupError = null
+                            createBackupLauncher.launch(backupFileName)
+                        },
+                        onCancel = { currentPage = SettingPage.BACKUP }
+                    )
+                }
+                SettingPage.BACKUP_RESTORE -> item {
+                    BackupRestorePreviewSection(
+                        backup = pendingRestore,
+                        currentRoomCount = rooms.size,
+                        currentPresetCount = presets.size,
+                        hasRunningTimer = rooms.any { it.isRunning },
+                        message = backupMessage,
+                        error = backupError,
+                        onChooseFile = { openBackupLauncher.launch(arrayOf("application/json", "application/octet-stream", "text/plain")) },
+                        onRestore = { showRestoreConfirmation = true }
                     )
                 }
                 SettingPage.ALARM -> item { ManagerAlarmSettingsSection() }
@@ -476,6 +592,50 @@ fun SettingScreen(
         )
     }
 
+    if (showRestoreConfirmation) pendingRestore?.let { backup ->
+        AlertDialog(
+            onDismissRequest = { showRestoreConfirmation = false },
+            title = { Text("이 설정을 복원할까요?") },
+            text = {
+                Text(
+                    "테마 ${backup.rooms.size}개 · 프리셋 ${backup.presets.size}개\n" +
+                        "매장 정보: ${backup.storeInfo.displayName.ifBlank { "없음" }}\n\n" +
+                        "현재 설정을 덮어쓰며 모든 테마는 대기 상태로 적용됩니다. 웹 관리자 PIN은 변경되지 않습니다."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val safetyBackup = ManagerBackup(
+                        createdAtEpochMillis = System.currentTimeMillis(),
+                        storeInfo = StoreInfoPreferences.load(context),
+                        rooms = rooms.toList(),
+                        presets = presets.toList(),
+                        alarmSettings = ManagerAlarmPreferences.load(context)
+                    )
+                    if (onRestoreRooms(backup.rooms)) {
+                        ManagerBackupManager.createSafetyBackup(context, safetyBackup)
+                        ThemePresetRepository.save(context, backup.presets)
+                        presets.clear()
+                        presets.addAll(backup.presets)
+                        StoreInfoPreferences.save(context, backup.storeInfo)
+                        savedStoreInfo = backup.storeInfo
+                        storeName = backup.storeInfo.storeName
+                        branchName = backup.storeInfo.branchName
+                        ManagerAlarmPreferences.save(context, backup.alarmSettings)
+                        backupHistory = ManagerBackupManager.history(context)
+                        backupError = null
+                        backupMessage = "설정 복원이 완료되었습니다."
+                    } else {
+                        backupMessage = null
+                        backupError = "실행 중인 타이머가 있어 복원할 수 없습니다."
+                    }
+                    showRestoreConfirmation = false
+                }) { Text("복원") }
+            },
+            dismissButton = { TextButton(onClick = { showRestoreConfirmation = false }) { Text("취소") } }
+        )
+    }
+
     if (showAddRoomDialog) {
         AddRoomDialog(
             suggestedName = "ROOM ${rooms.size + 1}",
@@ -556,6 +716,13 @@ private fun SettingsMenu(
             icon = SettingIcon.DOOR,
             badge = "${roomCount}개",
             onClick = { onPageSelected(SettingPage.ROOMS) }
+        )
+        SettingMenuCard(
+            title = "설정 백업 및 복원",
+            description = "운영 설정을 파일로 보관하고 복원합니다.",
+            color = Color(0xFF4FC3F7),
+            icon = SettingIcon.BACKUP,
+            onClick = { onPageSelected(SettingPage.BACKUP) }
         )
         SettingMenuCard(
             title = "서버 및 연결",
@@ -661,6 +828,13 @@ private fun SettingMenuIcon(icon: SettingIcon, color: Color) {
                 drawLine(color, androidx.compose.ui.geometry.Offset(w * .30f, h * .18f), androidx.compose.ui.geometry.Offset(w * .56f, h * .27f), stroke.width, StrokeCap.Round)
                 drawLine(color, androidx.compose.ui.geometry.Offset(w * .56f, h * .27f), androidx.compose.ui.geometry.Offset(w * .56f, h * .77f), stroke.width, StrokeCap.Round)
                 drawCircle(color, radius = w * .025f, center = androidx.compose.ui.geometry.Offset(w * .50f, h * .53f))
+            }
+            SettingIcon.BACKUP -> {
+                drawRoundRect(color, topLeft = androidx.compose.ui.geometry.Offset(w * .22f, h * .18f), size = androidx.compose.ui.geometry.Size(w * .56f, h * .64f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * .06f), style = stroke)
+                drawLine(color, androidx.compose.ui.geometry.Offset(w * .50f, h * .30f), androidx.compose.ui.geometry.Offset(w * .50f, h * .60f), stroke.width, StrokeCap.Round)
+                drawLine(color, androidx.compose.ui.geometry.Offset(w * .38f, h * .48f), androidx.compose.ui.geometry.Offset(w * .50f, h * .60f), stroke.width, StrokeCap.Round)
+                drawLine(color, androidx.compose.ui.geometry.Offset(w * .62f, h * .48f), androidx.compose.ui.geometry.Offset(w * .50f, h * .60f), stroke.width, StrokeCap.Round)
+                drawLine(color, androidx.compose.ui.geometry.Offset(w * .36f, h * .70f), androidx.compose.ui.geometry.Offset(w * .64f, h * .70f), stroke.width, StrokeCap.Round)
             }
             SettingIcon.SERVER -> {
                 repeat(3) { index ->
@@ -779,6 +953,122 @@ private fun StoreInfoSettingsSection(
             }
         }
     }
+}
+
+@Composable
+private fun BackupRestoreHomeSection(
+    history: List<BackupHistoryItem>,
+    onCreateBackup: () -> Unit,
+    onChooseRestore: () -> Unit,
+    onHistorySelected: (BackupHistoryItem) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        history.firstOrNull()?.let { recent ->
+            BackupCardTitle("최근 백업")
+            BackupHistoryCard(recent, onClick = { onHistorySelected(recent) })
+            if (history.size > 1) {
+                Text("이전 백업", color = Color(0xFFB8C1C9), fontSize = 13.sp)
+                history.drop(1).forEach { BackupHistoryCard(it, onClick = { onHistorySelected(it) }) }
+            }
+        }
+        BackupActionCard("설정 백업", "현재 설정을 백업 파일로 저장합니다.", Color(0xFF8B4DFF), onCreateBackup)
+        BackupActionCard("설정 복원", "백업 파일을 확인한 뒤 설정을 복원합니다.", Color(0xFFB8C1C9), onChooseRestore)
+        Text("ⓘ 웹 관리자 PIN은 백업에 포함되지 않습니다.", color = Color(0xFF9AA3AC), fontSize = 11.sp)
+    }
+}
+
+@Composable
+private fun BackupCreateSettingsSection(
+    fileName: String,
+    restoreEnabled: Boolean,
+    message: String?,
+    error: String?,
+    onCreateBackup: () -> Unit,
+    onCancel: () -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Color(0xFF3A4650)), colors = CardDefaults.cardColors(containerColor = AppSurface)) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("백업 내용", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text("전체 항목 · 5개", color = Color(0xFFB8C1C9), fontSize = 12.sp)
+            Text("☑ 테마 설정\n☑ 테마 프리셋\n☑ 알림 및 소리\n☑ 웹 관리자 설정 · PIN 제외\n☑ 기타 앱 설정", color = Color(0xFFD8DEE4), fontSize = 13.sp)
+            HorizontalDivider(color = Color(0xFF384049))
+            Text("백업 파일", color = Color.White, fontWeight = FontWeight.Bold)
+            Text(fileName, color = Color(0xFFB8C1C9), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("ⓘ 현재 타이머 진행 상태와 연결된 기기 정보는 포함되지 않습니다.", color = Color(0xFF9AA3AC), fontSize = 11.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f).height(50.dp)) { Text("취소") }
+                Button(onClick = onCreateBackup, modifier = Modifier.weight(1f).height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C36E8))) { Text("백업 파일 만들기", fontWeight = FontWeight.Bold) }
+            }
+        }
+    }
+    BackupResultMessages(message, error)
+}
+
+@Composable
+private fun BackupRestorePreviewSection(
+    backup: ManagerBackup?,
+    currentRoomCount: Int,
+    currentPresetCount: Int,
+    hasRunningTimer: Boolean,
+    message: String?,
+    error: String?,
+    onChooseFile: () -> Unit,
+    onRestore: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Color(0xFF3A4650)), colors = CardDefaults.cardColors(containerColor = AppSurface)) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(if (backup == null) "백업 파일을 선택해 주세요." else "사용 가능한 백업", color = if (backup == null) Color.White else Color(0xFF82D72D), fontWeight = FontWeight.Bold)
+                backup?.let {
+                    Text("✓ 파일 검사 완료\n✓ 앱 버전 호환", color = Color(0xFFB8C1C9), fontSize = 12.sp)
+                }
+                OutlinedButton(onClick = onChooseFile, modifier = Modifier.fillMaxWidth()) { Text(if (backup == null) "백업 파일 선택" else "다른 파일 선택") }
+            }
+        }
+        backup?.let {
+            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = AppSurface)) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("변경 내용", color = Color.White, fontWeight = FontWeight.Bold)
+                    Text("테마        ${currentRoomCount}개  →  ${it.rooms.size}개\n프리셋      ${currentPresetCount}개  →  ${it.presets.size}개\n알림 설정   변경됨\n웹 관리자 PIN   현재 설정 유지", color = Color(0xFFB8C1C9), fontSize = 13.sp)
+                }
+            }
+        }
+        if (hasRunningTimer) Text("⚠ 실행 중인 테마가 있습니다.\n실행 중인 테마를 모두 정지한 뒤 복원해 주세요.", color = Color(0xFFFFB000), modifier = Modifier.fillMaxWidth().background(Color(0x332F2500), RoundedCornerShape(10.dp)).padding(12.dp))
+        Button(onClick = onRestore, enabled = backup != null && !hasRunningTimer, modifier = Modifier.fillMaxWidth().height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C36E8))) { Text("설정 복원", fontWeight = FontWeight.Bold) }
+        Text("ⓘ 복원 직전에 현재 설정을 안전 백업으로 자동 저장합니다.", color = Color(0xFF9AA3AC), fontSize = 11.sp)
+        BackupResultMessages(message, error)
+    }
+}
+
+@Composable private fun BackupCardTitle(text: String) = Text(text, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+
+@Composable
+private fun BackupHistoryCard(item: BackupHistoryItem, onClick: () -> Unit) {
+    val date = remember(item.createdAtEpochMillis) { SimpleDateFormat("yyyy.MM.dd HH:mm", Locale.KOREA).format(Date(item.createdAtEpochMillis)) }
+    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick), colors = CardDefaults.cardColors(containerColor = AppSurface), border = BorderStroke(1.dp, Color(0xFF3A4650))) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Text(date, color = Color.White, fontWeight = FontWeight.Bold)
+            Text(item.fileName, color = Color(0xFFB8C1C9), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("테마 ${item.roomCount}개 · 프리셋 ${item.presetCount}개 · 사용 가능", color = Color(0xFF82D72D), fontSize = 12.sp)
+        }
+    }
+}
+
+@Composable
+private fun BackupActionCard(title: String, description: String, color: Color, onClick: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick), colors = CardDefaults.cardColors(containerColor = AppSurface), border = BorderStroke(1.dp, Color(0xFF3A4650))) {
+        Row(modifier = Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("⇧", color = color, fontSize = 30.sp)
+            Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) { Text(title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold); Text(description, color = Color(0xFFB8C1C9), fontSize = 12.sp) }
+            Text("›", color = Color.White, fontSize = 30.sp)
+        }
+    }
+}
+
+@Composable
+private fun BackupResultMessages(message: String?, error: String?) {
+    message?.let { Text("✓  $it", color = Color(0xFF82D72D), modifier = Modifier.fillMaxWidth().background(Color(0x142D6B00), RoundedCornerShape(10.dp)).padding(12.dp)) }
+    error?.let { Text("✕  $it", color = Color(0xFFFF6B6B), modifier = Modifier.fillMaxWidth().background(Color(0x22FF5252), RoundedCornerShape(10.dp)).padding(12.dp)) }
 }
 
 @Composable

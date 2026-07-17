@@ -103,6 +103,14 @@ object TimerManager {
         return true
     }
 
+    fun restoreConfiguration(restoredRooms: List<RoomInfo>): Boolean {
+        if (rooms.any { it.isRunning } || restoredRooms.isEmpty()) return false
+        rooms.clear()
+        rooms.addAll(restoredRooms)
+        persistNow()
+        return true
+    }
+
     fun start(roomId: String) {
         updateRoom(roomId) { room ->
             if (!room.isEnabled || room.isMaintenance || room.isRunning) return@updateRoom room
