@@ -49,9 +49,9 @@ fun AddRoomDialog(
         shape = RoundedCornerShape(20.dp),
         title = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("새 방 추가", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text("새 테마 추가", fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 Text(
-                    "방 이름과 기본 제한 시간을 설정하세요.",
+                    "테마 이름과 기본 제한 시간을 설정하세요.",
                     color = Color(0xFF9AA3AC),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Normal
@@ -66,7 +66,7 @@ fun AddRoomDialog(
                         roomName = it
                         validationMessage = null
                     },
-                    label = { Text("방 이름") },
+                    label = { Text("테마 이름") },
                     placeholder = { Text("예: ROOM 6") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
@@ -130,14 +130,14 @@ fun AddRoomDialog(
                     val cleanName = roomName.trim()
                     val minutes = roomMinutes.toIntOrNull()
                     when {
-                        cleanName.isBlank() -> validationMessage = "방 이름을 입력해 주세요."
+                        cleanName.isBlank() -> validationMessage = "테마 이름을 입력해 주세요."
                         minutes == null || minutes !in 1..240 -> validationMessage = "기본 시간을 1~240분 사이로 입력해 주세요."
                         else -> onConfirm(cleanName, minutes)
                     }
                 },
                 shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = AddRoomAccent, contentColor = Color(0xFF07130B))
-            ) { Text("방 추가", fontWeight = FontWeight.Bold) }
+            ) { Text("테마 추가", fontWeight = FontWeight.Bold) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("취소", color = Color(0xFFB8C0C8)) }
