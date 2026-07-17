@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -56,6 +57,8 @@ import com.example.escaperoomtimer.model.RoomInfo
 import com.example.escaperoomtimer.model.ThemePreset
 import com.example.escaperoomtimer.network.ManagerTcpServer
 import com.example.escaperoomtimer.repository.ThemePresetRepository
+import com.example.escaperoomtimer.settings.StoreInfo
+import com.example.escaperoomtimer.settings.StoreInfoPreferences
 import com.example.escaperoomtimer.settings.WebAdminPinPreferences
 import com.example.escaperoomtimer.ui.common.AddRoomDialog
 import com.example.escaperoomtimer.ui.theme.AppBlack
@@ -63,10 +66,14 @@ import com.example.escaperoomtimer.ui.theme.AppSurface
 import com.example.escaperoomtimer.util.localIpv4Address
 import com.example.escaperoomtimer.web.ManagerWebServer
 import java.util.UUID
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlinx.coroutines.delay
 
 private enum class SettingPage(val title: String, val subtitle: String) {
     MENU("설정", "매장 운영 옵션을 관리합니다."),
+    STORE("매장 정보", "앱과 백업 파일에 사용할 매장 정보를 설정합니다."),
     ALARM("알림 및 소리", "타이머 종료 알림을 설정합니다."),
     WEB_PIN("웹 관리자 PIN", "PC 웹 로그인 PIN을 관리합니다."),
     PRESETS("테마 프리셋", "테마 이름과 기본 시간 조합을 관리합니다."),
@@ -74,7 +81,7 @@ private enum class SettingPage(val title: String, val subtitle: String) {
     SERVER("서버 및 연결", "손님용 TCP와 웹 서버 상태를 확인합니다.")
 }
 
-private enum class SettingIcon { BELL, SHIELD, PALETTE, DOOR, SERVER }
+private enum class SettingIcon { STORE, BELL, SHIELD, PALETTE, DOOR, SERVER }
 
 @Composable
 fun SettingScreen(
@@ -94,6 +101,12 @@ fun SettingScreen(
         mutableStateListOf<ThemePreset>().apply { addAll(ThemePresetRepository.load(context)) }
     }
     var currentPage by remember { mutableStateOf(SettingPage.MENU) }
+    var savedStoreInfo by remember { mutableStateOf(StoreInfoPreferences.load(context)) }
+    var storeName by remember { mutableStateOf(savedStoreInfo.storeName) }
+    var branchName by remember { mutableStateOf(savedStoreInfo.branchName) }
+    var storeInfoSaved by remember { mutableStateOf(false) }
+    var showDiscardStoreChanges by remember { mutableStateOf(false) }
+    var showResetStoreInfo by remember { mutableStateOf(false) }
     var localIp by remember { mutableStateOf(localIpv4Address()) }
     var webServerStatus by remember { mutableStateOf(ManagerWebServer.statusText()) }
 
@@ -107,6 +120,8 @@ fun SettingScreen(
     var selectedRoomId by remember { mutableStateOf<String?>(null) }
     var reorderRooms by remember { mutableStateOf(false) }
     var showAddRoomDialog by remember { mutableStateOf(false) }
+    val storeInfoChanged = storeName.trim() != savedStoreInfo.storeName ||
+        branchName.trim() != savedStoreInfo.branchName
 
     LaunchedEffect(rooms.map { it.id to it.name }) {
         rooms.forEach { room ->
@@ -155,6 +170,7 @@ fun SettingScreen(
             onBack = {
                 when {
                     currentPage == SettingPage.MENU -> onBack()
+                    currentPage == SettingPage.STORE && storeInfoChanged -> showDiscardStoreChanges = true
                     currentPage == SettingPage.ROOMS && selectedRoomId != null -> selectedRoomId = null
                     else -> currentPage = SettingPage.MENU
                 }
@@ -173,11 +189,37 @@ fun SettingScreen(
                 SettingPage.MENU -> {
                     item {
                         SettingsMenu(
+                            storeInfoConfigured = savedStoreInfo.storeName.isNotBlank(),
                             presetCount = presets.size,
                             roomCount = rooms.size,
                             onPageSelected = { currentPage = it }
                         )
                     }
+                }
+                SettingPage.STORE -> item {
+                    StoreInfoSettingsSection(
+                        storeName = storeName,
+                        branchName = branchName,
+                        saved = storeInfoSaved,
+                        changed = storeInfoChanged,
+                        onStoreNameChange = {
+                            storeName = it.take(30)
+                            storeInfoSaved = false
+                        },
+                        onBranchNameChange = {
+                            branchName = it.take(20)
+                            storeInfoSaved = false
+                        },
+                        onSave = {
+                            val info = StoreInfo(storeName.trim(), branchName.trim())
+                            StoreInfoPreferences.save(context, info)
+                            savedStoreInfo = info
+                            storeName = info.storeName
+                            branchName = info.branchName
+                            storeInfoSaved = true
+                        },
+                        onReset = { showResetStoreInfo = true }
+                    )
                 }
                 SettingPage.ALARM -> item { ManagerAlarmSettingsSection() }
                 SettingPage.WEB_PIN -> item { WebAdminPinSettingsSection() }
@@ -395,6 +437,45 @@ fun SettingScreen(
         )
     }
 
+    if (showDiscardStoreChanges) {
+        AlertDialog(
+            onDismissRequest = { showDiscardStoreChanges = false },
+            title = { Text("변경 내용을 저장하지 않고 나갈까요?") },
+            text = { Text("입력한 변경 내용이 저장되지 않습니다.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    storeName = savedStoreInfo.storeName
+                    branchName = savedStoreInfo.branchName
+                    storeInfoSaved = false
+                    showDiscardStoreChanges = false
+                    currentPage = SettingPage.MENU
+                }) { Text("나가기", color = Color(0xFFFF5252)) }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showDiscardStoreChanges = false }) { Text("계속 편집") }
+            }
+        )
+    }
+
+    if (showResetStoreInfo) {
+        AlertDialog(
+            onDismissRequest = { showResetStoreInfo = false },
+            title = { Text("매장 정보를 초기화할까요?") },
+            text = { Text("운영 대시보드와 백업 파일에서 매장 정보가 제거됩니다. 테마와 타이머 설정은 유지됩니다.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    StoreInfoPreferences.clear(context)
+                    savedStoreInfo = StoreInfo()
+                    storeName = ""
+                    branchName = ""
+                    storeInfoSaved = true
+                    showResetStoreInfo = false
+                }) { Text("초기화", color = Color(0xFFFF5252)) }
+            },
+            dismissButton = { TextButton(onClick = { showResetStoreInfo = false }) { Text("취소") } }
+        )
+    }
+
     if (showAddRoomDialog) {
         AddRoomDialog(
             suggestedName = "ROOM ${rooms.size + 1}",
@@ -431,11 +512,20 @@ private fun SettingTopBar(page: SettingPage, onBack: () -> Unit) {
 
 @Composable
 private fun SettingsMenu(
+    storeInfoConfigured: Boolean,
     presetCount: Int,
     roomCount: Int,
     onPageSelected: (SettingPage) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        SettingMenuCard(
+            title = "매장 정보",
+            description = "매장명과 지점 정보를 관리합니다.",
+            color = Color(0xFFFF765C),
+            icon = SettingIcon.STORE,
+            badge = if (storeInfoConfigured) "설정됨" else null,
+            onClick = { onPageSelected(SettingPage.STORE) }
+        )
         SettingMenuCard(
             title = "알림 및 소리",
             description = "타이머 종료 알림과 소리를 설정합니다.",
@@ -525,6 +615,14 @@ private fun SettingMenuIcon(icon: SettingIcon, color: Color) {
         val w = size.width
         val h = size.height
         when (icon) {
+            SettingIcon.STORE -> {
+                drawRect(color, topLeft = androidx.compose.ui.geometry.Offset(w * .25f, h * .38f), size = androidx.compose.ui.geometry.Size(w * .50f, h * .40f), style = stroke)
+                drawLine(color, androidx.compose.ui.geometry.Offset(w * .20f, h * .38f), androidx.compose.ui.geometry.Offset(w * .28f, h * .20f), stroke.width, StrokeCap.Round)
+                drawLine(color, androidx.compose.ui.geometry.Offset(w * .28f, h * .20f), androidx.compose.ui.geometry.Offset(w * .72f, h * .20f), stroke.width, StrokeCap.Round)
+                drawLine(color, androidx.compose.ui.geometry.Offset(w * .72f, h * .20f), androidx.compose.ui.geometry.Offset(w * .80f, h * .38f), stroke.width, StrokeCap.Round)
+                drawLine(color, androidx.compose.ui.geometry.Offset(w * .43f, h * .78f), androidx.compose.ui.geometry.Offset(w * .43f, h * .56f), stroke.width, StrokeCap.Round)
+                drawLine(color, androidx.compose.ui.geometry.Offset(w * .43f, h * .56f), androidx.compose.ui.geometry.Offset(w * .58f, h * .56f), stroke.width, StrokeCap.Round)
+            }
             SettingIcon.BELL -> {
                 val bell = Path().apply {
                     moveTo(w * .25f, h * .68f)
@@ -570,6 +668,114 @@ private fun SettingMenuIcon(icon: SettingIcon, color: Color) {
                     drawRoundRect(color, topLeft = androidx.compose.ui.geometry.Offset(w * .24f, top), size = androidx.compose.ui.geometry.Size(w * .52f, h * .16f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * .04f), style = stroke)
                     drawCircle(color, radius = w * .022f, center = androidx.compose.ui.geometry.Offset(w * .32f, top + h * .08f))
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StoreInfoSettingsSection(
+    storeName: String,
+    branchName: String,
+    saved: Boolean,
+    changed: Boolean,
+    onStoreNameChange: (String) -> Unit,
+    onBranchNameChange: (String) -> Unit,
+    onSave: () -> Unit,
+    onReset: () -> Unit
+) {
+    val cleanStoreName = storeName.trim()
+    val cleanBranchName = branchName.trim()
+    val displayName = listOf(cleanStoreName, cleanBranchName)
+        .filter { it.isNotBlank() }
+        .joinToString(" · ")
+        .ifBlank { "표시할 매장 정보가 없습니다." }
+    val safeName = listOf(cleanStoreName, cleanBranchName)
+        .filter { it.isNotBlank() }
+        .joinToString("_")
+        .replace(Regex("[^가-힣A-Za-z0-9_-]"), "_")
+        .trim('_')
+    val timestamp = remember { SimpleDateFormat("yyyyMMdd_HHmm", Locale.KOREA).format(Date()) }
+    val backupName = if (safeName.isBlank()) {
+        "EscapeRoom_Backup_${timestamp}.ers"
+    } else {
+        "EscapeRoom_${safeName}_${timestamp}.ers"
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, Color(0xFF3A4650)),
+            colors = CardDefaults.cardColors(containerColor = AppSurface)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedTextField(
+                    value = storeName,
+                    onValueChange = onStoreNameChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("매장명") },
+                    supportingText = {
+                        Text(if (cleanStoreName.isBlank()) "매장명을 입력해 주세요." else "직원용 앱과 웹 대시보드에 표시됩니다.")
+                    },
+                    isError = cleanStoreName.isBlank(),
+                    singleLine = true,
+                    suffix = { Text("${storeName.length}/30") }
+                )
+                OutlinedTextField(
+                    value = branchName,
+                    onValueChange = onBranchNameChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("지점명 (선택)") },
+                    supportingText = { Text("여러 지점을 구분할 때 사용합니다.") },
+                    singleLine = true,
+                    suffix = { Text("${branchName.length}/20") }
+                )
+                HorizontalDivider(color = Color(0xFF384049))
+                Text("표시 이름 미리보기", color = Color(0xFF9AA3AC), fontSize = 12.sp)
+                Text(displayName, color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF11161A)),
+                    border = BorderStroke(1.dp, Color(0xFF313941)),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+                        Text("운영 대시보드", color = Color(0xFF9AA3AC), fontSize = 11.sp)
+                        Text(displayName, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                Text("실제 백업 파일 이름", color = Color(0xFF9AA3AC), fontSize = 12.sp)
+                Text(
+                    backupName,
+                    color = Color(0xFFB8C1C9),
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text("ⓘ 사용할 수 없는 문자는 파일 이름에서 자동으로 정리됩니다.", color = Color(0xFF8D96A0), fontSize = 11.sp)
+                Text("ⓘ 정보를 변경해도 실행 중인 타이머와 기기 연결은 유지됩니다.", color = Color(0xFF8D96A0), fontSize = 11.sp)
+                Button(
+                    onClick = onSave,
+                    enabled = cleanStoreName.isNotBlank() && changed,
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C4DFF))
+                ) { Text("저장", fontWeight = FontWeight.Bold) }
+                TextButton(onClick = onReset, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                    Text("매장 정보 초기화", color = Color(0xFFB8C1C9))
+                }
+            }
+        }
+        if (saved) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                border = BorderStroke(1.dp, Color(0xFF62C900)),
+                colors = CardDefaults.cardColors(containerColor = Color(0x142D6B00)),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("✓  매장 정보가 저장되었습니다.", color = Color(0xFF82D72D), modifier = Modifier.padding(12.dp))
             }
         }
     }
