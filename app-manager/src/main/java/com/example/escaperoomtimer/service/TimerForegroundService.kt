@@ -82,6 +82,7 @@ class TimerForegroundService : Service() {
         heartbeatExecutor?.shutdownNow()
         heartbeatExecutor = null
         releaseRuntimeLocks()
+        stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
     }
 

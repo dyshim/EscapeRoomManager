@@ -27,6 +27,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -90,7 +91,7 @@ private enum class SettingPage(val title: String, val subtitle: String) {
     SERVER("서버 및 연결", "손님용 TCP와 웹 서버 상태를 확인합니다.")
 }
 
-private enum class SettingIcon { STORE, BELL, SHIELD, PALETTE, DOOR, BACKUP, SERVER }
+private enum class SettingIcon { STORE, BELL, SHIELD, PALETTE, DOOR, BACKUP, SERVER, POWER }
 
 @Composable
 fun SettingScreen(
@@ -102,7 +103,8 @@ fun SettingScreen(
     onDeleteRoom: (roomId: String) -> Boolean,
     onMoveRoom: (roomId: String, direction: Int) -> Boolean,
     onAddRoom: (name: String, defaultMinutes: Int) -> String,
-    onRestoreRooms: (List<RoomInfo>) -> Boolean
+    onRestoreRooms: (List<RoomInfo>) -> Boolean,
+    onExitApp: () -> Unit
 ) {
     val context = LocalContext.current
     val nameInputs = remember { mutableStateMapOf<String, String>() }
@@ -122,6 +124,8 @@ fun SettingScreen(
     var backupHistory by remember { mutableStateOf(ManagerBackupManager.history(context)) }
     var backupMessage by remember { mutableStateOf<String?>(null) }
     var backupError by remember { mutableStateOf<String?>(null) }
+    var showExitConfirmation by remember { mutableStateOf(false) }
+    var exitInProgress by remember { mutableStateOf(false) }
     var localIp by remember { mutableStateOf(localIpv4Address()) }
     var webServerStatus by remember { mutableStateOf(ManagerWebServer.statusText()) }
 
@@ -263,7 +267,8 @@ fun SettingScreen(
                             storeInfoConfigured = savedStoreInfo.storeName.isNotBlank(),
                             presetCount = presets.size,
                             roomCount = rooms.size,
-                            onPageSelected = { currentPage = it }
+                            onPageSelected = { currentPage = it },
+                            onExitSelected = { showExitConfirmation = true }
                         )
                     }
                 }
@@ -636,6 +641,35 @@ fun SettingScreen(
         )
     }
 
+    if (showExitConfirmation) {
+        val runningRooms = rooms.filter { it.isRunning }
+        ExitAppConfirmationDialog(
+            runningRooms = runningRooms,
+            guestCount = ManagerTcpServer.connectedDisplayCounts.values.sum(),
+            webCount = ManagerWebServer.connectedWebCount,
+            onDismiss = { showExitConfirmation = false },
+            onConfirm = {
+                showExitConfirmation = false
+                exitInProgress = true
+                onExitApp()
+            }
+        )
+    }
+
+    if (exitInProgress) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("앱을 안전하게 종료하는 중입니다.") },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    CircularProgressIndicator(modifier = Modifier.size(34.dp), color = Color(0xFF74C98C))
+                    Text("현재 상태를 저장하고 연결 서버를 정리합니다.")
+                }
+            },
+            confirmButton = {}
+        )
+    }
+
     if (showAddRoomDialog) {
         AddRoomDialog(
             suggestedName = "ROOM ${rooms.size + 1}",
@@ -675,7 +709,8 @@ private fun SettingsMenu(
     storeInfoConfigured: Boolean,
     presetCount: Int,
     roomCount: Int,
-    onPageSelected: (SettingPage) -> Unit
+    onPageSelected: (SettingPage) -> Unit,
+    onExitSelected: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SettingMenuCard(
@@ -730,6 +765,14 @@ private fun SettingsMenu(
             color = Color(0xFF73D5C8),
             icon = SettingIcon.SERVER,
             onClick = { onPageSelected(SettingPage.SERVER) }
+        )
+        Text("앱", color = Color(0xFF8D96A0), fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+        SettingMenuCard(
+            title = "직원용 앱 종료",
+            description = "직원용 앱과 연결 서버를 안전하게 종료합니다.",
+            color = Color(0xFFFF5252),
+            icon = SettingIcon.POWER,
+            onClick = onExitSelected
         )
     }
 }
@@ -842,6 +885,10 @@ private fun SettingMenuIcon(icon: SettingIcon, color: Color) {
                     drawRoundRect(color, topLeft = androidx.compose.ui.geometry.Offset(w * .24f, top), size = androidx.compose.ui.geometry.Size(w * .52f, h * .16f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * .04f), style = stroke)
                     drawCircle(color, radius = w * .022f, center = androidx.compose.ui.geometry.Offset(w * .32f, top + h * .08f))
                 }
+            }
+            SettingIcon.POWER -> {
+                drawArc(color, startAngle = -45f, sweepAngle = 270f, useCenter = false, topLeft = androidx.compose.ui.geometry.Offset(w * .20f, h * .20f), size = androidx.compose.ui.geometry.Size(w * .60f, h * .60f), style = stroke)
+                drawLine(color, androidx.compose.ui.geometry.Offset(w * .50f, h * .12f), androidx.compose.ui.geometry.Offset(w * .50f, h * .48f), stroke.width, StrokeCap.Round)
             }
         }
     }
@@ -1070,6 +1117,68 @@ private fun BackupResultMessages(message: String?, error: String?) {
     message?.let { Text("✓  $it", color = Color(0xFF82D72D), modifier = Modifier.fillMaxWidth().background(Color(0x142D6B00), RoundedCornerShape(10.dp)).padding(12.dp)) }
     error?.let { Text("✕  $it", color = Color(0xFFFF6B6B), modifier = Modifier.fillMaxWidth().background(Color(0x22FF5252), RoundedCornerShape(10.dp)).padding(12.dp)) }
 }
+
+@Composable
+private fun ExitAppConfirmationDialog(
+    runningRooms: List<RoomInfo>,
+    guestCount: Int,
+    webCount: Int,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    val hasRunningRooms = runningRooms.isNotEmpty()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                if (hasRunningRooms) "실행 중인 테마 ${runningRooms.size}개" else "직원용 앱을 종료할까요?",
+                color = if (hasRunningRooms) Color(0xFFFFB000) else Color.White,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    if (hasRunningRooms) "종료 후 직원용 앱에서는 제어할 수 없습니다."
+                    else "직원용 앱이 종료되며 연결 서버가 중지됩니다.",
+                    color = Color(0xFFB8C1C9)
+                )
+                Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF11161A)), border = BorderStroke(1.dp, Color(0xFF3A4650))) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ExitSummaryRow("손님용 기기", "${guestCount}대")
+                        ExitSummaryRow("웹 사용자", "${webCount}명")
+                        ExitSummaryRow("실행 중인 테마", "${runningRooms.size}개")
+                        runningRooms.forEach { room ->
+                            ExitSummaryRow("  ${room.name}", formatExitTime(room.seconds))
+                        }
+                    }
+                }
+                Text(
+                    "ⓘ 손님용 타이머는 마지막으로 받은 기준 상태로 계속 진행됩니다.\n" +
+                        "직원용 앱을 다시 실행하면 저장된 상태를 복원하고 다시 연결합니다.",
+                    color = Color(0xFFB8C1C9),
+                    fontSize = 12.sp
+                )
+            }
+        },
+        confirmButton = {
+            OutlinedButton(onClick = onConfirm, border = BorderStroke(1.dp, Color(0xFFFF5252))) {
+                Text(if (hasRunningRooms) "그래도 종료" else "앱 종료", color = Color(0xFFFF5252))
+            }
+        },
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("취소") } }
+    )
+}
+
+@Composable
+private fun ExitSummaryRow(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = Color(0xFFD8DEE4), fontSize = 13.sp)
+        Text(value, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+private fun formatExitTime(seconds: Int): String = "%02d:%02d".format(seconds.coerceAtLeast(0) / 60, seconds.coerceAtLeast(0) % 60)
 
 @Composable
 private fun EmptyPresetCard() {

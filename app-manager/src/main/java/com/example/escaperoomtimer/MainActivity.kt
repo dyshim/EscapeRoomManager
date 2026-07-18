@@ -15,6 +15,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.example.escaperoomtimer.manager.HintProgressManager
 import com.example.escaperoomtimer.manager.TimerManager
 import com.example.escaperoomtimer.service.TimerForegroundService
@@ -23,8 +24,13 @@ import com.example.escaperoomtimer.ui.setting.SettingScreen
 import com.example.escaperoomtimer.ui.timer.TimerScreen
 import com.example.escaperoomtimer.ui.theme.EscapeRoomTimerTheme
 import com.example.escaperoomtimer.web.ManagerWebServer
+import com.example.escaperoomtimer.network.ManagerTcpServer
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    private val exitInProgress = AtomicBoolean(false)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -34,7 +40,7 @@ class MainActivity : ComponentActivity() {
         requestNotificationPermissionIfNeeded()
         startTimerForegroundService()
 
-        setContent { EscapeRoomTimerTheme { EscapeRoomManagerApp() } }
+        setContent { EscapeRoomTimerTheme { EscapeRoomManagerApp(onExitApp = ::shutdownManagerApp) } }
     }
 
     override fun onStop() {
@@ -44,6 +50,19 @@ class MainActivity : ComponentActivity() {
 
     private fun startTimerForegroundService() {
         ContextCompat.startForegroundService(this, Intent(this, TimerForegroundService::class.java))
+    }
+
+    private fun shutdownManagerApp() {
+        if (!exitInProgress.compareAndSet(false, true)) return
+        lifecycleScope.launch {
+            TimerManager.persistNow()
+            ManagerTcpServer.broadcastRooms(TimerManager.rooms)
+            ManagerWebServer.broadcastState()
+            delay(300L)
+            stopService(Intent(this@MainActivity, TimerForegroundService::class.java))
+            delay(400L)
+            finishAndRemoveTask()
+        }
     }
 
     private fun requestNotificationPermissionIfNeeded() {
@@ -66,7 +85,7 @@ class MainActivity : ComponentActivity() {
 private enum class ScreenMode { HOME, SETTING, STAFF_TIMER }
 
 @Composable
-fun EscapeRoomManagerApp() {
+fun EscapeRoomManagerApp(onExitApp: () -> Unit) {
     var selectedRoomId by remember { mutableStateOf<String?>(null) }
     var screenMode by remember { mutableStateOf(ScreenMode.HOME) }
 
@@ -90,7 +109,8 @@ fun EscapeRoomManagerApp() {
             onDeleteRoom = TimerManager::deleteRoom,
             onMoveRoom = TimerManager::moveRoom,
             onAddRoom = TimerManager::addRoom,
-            onRestoreRooms = TimerManager::restoreConfiguration
+            onRestoreRooms = TimerManager::restoreConfiguration,
+            onExitApp = onExitApp
         )
 
         ScreenMode.STAFF_TIMER -> {
