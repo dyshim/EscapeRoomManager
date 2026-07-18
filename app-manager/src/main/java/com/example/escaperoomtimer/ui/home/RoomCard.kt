@@ -46,7 +46,7 @@ fun RoomCard(
 
     val badgeText = if (room.isMaintenance) "유지보수" else when (room.status) {
         RoomStatus.WAITING -> "대기"
-        RoomStatus.RUNNING -> "진행중"
+        RoomStatus.RUNNING -> "진행 중"
         RoomStatus.WARNING -> if (room.isRunning) "5분 이하" else "일시정지"
         RoomStatus.PAUSED -> "일시정지"
         RoomStatus.FINISHED -> "종료"

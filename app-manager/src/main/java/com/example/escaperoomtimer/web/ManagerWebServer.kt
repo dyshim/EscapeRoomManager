@@ -557,7 +557,7 @@ object ManagerWebServer {
                 if (index > 0) append(',')
                 val endLabel = when {
                     room.isMaintenance -> "유지보수"
-                    room.status == RoomStatus.FINISHED || room.seconds <= 0 -> "종료됨"
+                    room.status == RoomStatus.FINISHED || room.seconds <= 0 -> "종료"
                     room.isRunning -> formatter.format(Date(now + room.seconds * 1000L))
                     room.status == RoomStatus.PAUSED -> "일시정지 중"
                     else -> "시작 후 표시"

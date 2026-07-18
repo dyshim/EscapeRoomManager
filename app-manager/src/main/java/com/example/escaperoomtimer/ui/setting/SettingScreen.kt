@@ -800,7 +800,13 @@ private fun SettingMenuCard(
             Column(modifier = Modifier.weight(1f).padding(start = 18.dp)) {
                 Text(title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(3.dp))
-                Text(description, color = Color(0xFFB2BAC2), fontSize = 12.sp, maxLines = 1)
+                Text(
+                    text = description,
+                    color = Color(0xFFB2BAC2),
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    maxLines = 2
+                )
             }
             badge?.let {
                 Text(

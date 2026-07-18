@@ -102,14 +102,14 @@ class RoomStatusWidgetProvider : AppWidgetProvider() {
         }
 
         private fun statusText(room: RoomInfo): String = if (room.isMaintenance) "유지보수" else when (room.status) {
-            RoomStatus.WAITING -> "대기중"
+            RoomStatus.WAITING -> "대기"
             RoomStatus.FINISHED -> "종료"
             else -> formatTime(room.seconds)
         }
 
         private fun expectedEndText(room: RoomInfo): String = when {
             room.isMaintenance -> "손님용 숨김"
-            room.status == RoomStatus.FINISHED || room.seconds <= 0 -> "종료됨"
+            room.status == RoomStatus.FINISHED || room.seconds <= 0 -> "종료"
             room.isRunning -> "종료 ${formatExpectedTime(System.currentTimeMillis() + room.seconds * 1_000L)}"
             room.status == RoomStatus.PAUSED -> "일시정지"
             else -> "시작 후 표시"

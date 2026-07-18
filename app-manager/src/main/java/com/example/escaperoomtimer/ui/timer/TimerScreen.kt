@@ -613,7 +613,7 @@ private fun UndoBar(
 fun StatusBadge(status: RoomStatus, isRunning: Boolean, isMaintenance: Boolean = false) {
     val label = if (isMaintenance) "유지보수" else when (status) {
         RoomStatus.WAITING -> "대기"
-        RoomStatus.RUNNING -> "진행중"
+        RoomStatus.RUNNING -> "진행 중"
         RoomStatus.WARNING -> if (isRunning) "5분 이하" else "일시정지"
         RoomStatus.PAUSED -> "일시정지"
         RoomStatus.FINISHED -> "종료"

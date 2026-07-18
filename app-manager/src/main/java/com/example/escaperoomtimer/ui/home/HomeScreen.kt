@@ -87,7 +87,7 @@ fun HomeScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text("☰", color = Color.White, fontSize = 32.sp)
-            Text("방탈출 운영", color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Bold)
+            Text("운영 대시보드", color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Bold)
             Text(
                 text = "⚙",
                 color = Color.White,
@@ -165,8 +165,8 @@ fun HomeScreen(
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text("사용 중인 방이 없습니다.", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                Text("아래 버튼으로 방을 추가하거나 설정에서 방을 활성화하세요.", color = Color(0xFFC8D0D7), fontSize = 15.sp)
+                Text("사용 중인 테마가 없습니다.", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text("아래 버튼으로 테마를 추가하거나 설정에서 테마를 활성화하세요.", color = Color(0xFFC8D0D7), fontSize = 15.sp)
             }
         } else {
             LazyColumn(
@@ -196,7 +196,7 @@ fun HomeScreen(
         ) {
             Text("+", color = Color(0xFF74C98C), fontSize = 30.sp, fontWeight = FontWeight.Bold)
             Text(
-                "새 방 추가",
+                "새 테마 추가",
                 color = Color(0xFF74C98C),
                 fontSize = 17.sp,
                 fontWeight = FontWeight.SemiBold,

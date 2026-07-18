@@ -48,7 +48,7 @@
   function statusText(room){
     if(room.maintenance) return '유지보수';
     if(Number(room.seconds) <= 0) return '종료';
-    if(room.running) return Number(room.seconds) <= 300 ? '5분 이하' : '진행중';
+    if(room.running) return Number(room.seconds) <= 300 ? '5분 이하' : '진행 중';
     if(room.status === 'PAUSED') return '일시정지';
     return '대기';
   }
@@ -178,7 +178,7 @@
     if(alarmTimeout){ window.clearTimeout(alarmTimeout); alarmTimeout = null; }
     activeEndedRooms.clear();
     updateAlarmBanner();
-    document.title = '방탈출 운영';
+    document.title = '운영 대시보드';
   }
   function acknowledgeRoom(id){
     activeEndedRooms.delete(id);
@@ -186,7 +186,7 @@
       stopAlarmSound();
       if(alarmTimeout) window.clearTimeout(alarmTimeout);
       alarmTimeout = null;
-      document.title = '방탈출 운영';
+      document.title = '운영 대시보드';
     }
     updateAlarmBanner();
   }
@@ -247,8 +247,8 @@
     var running = !!room.running;
     var ended = Number(room.seconds) <= 0 && !room.maintenance;
     var html = '<section class="room ' + (ended?'ended':'') + '" data-room-id="' + safeId + '"><div class="top"><div class="name">' + escapeHtml(room.name) + '</div><div class="badge">' + statusText(room) + '</div></div><div class="time">' + timeText(room.seconds) + '</div><div class="end">종료 예정 ' + escapeHtml(room.endLabel) + '</div>';
-    if(ended){ html += '<div class="endedText">게임 종료</div><button class="alertStop room-alarm-button" data-room-id="' + safeId + '" type="button">이 방 웹 알람 확인</button>'; }
-    if(room.maintenance){ html += '<div class="error">유지보수 중인 방입니다.</div>'; }
+    if(ended){ html += '<div class="endedText">게임 종료</div><button class="alertStop room-alarm-button" data-room-id="' + safeId + '" type="button">이 테마 웹 알람 확인</button>'; }
+    if(room.maintenance){ html += '<div class="error">유지보수 중인 테마입니다.</div>'; }
     else{
       html += '<div class="controls">'
         + '<button class="' + (running?'pause':'start') + ' room-action" data-room-id="' + safeId + '" data-action="' + (running?'pause':'start') + '" type="button">' + (running?'일시정지':'시작') + '</button>'
@@ -298,7 +298,7 @@
     roomsElement.innerHTML = rooms.length ? rooms.map(function(room){
       renderedRoomModes[room.id] = roomMode(room);
       return card(room);
-    }).join('') : '<div class="empty">사용 중인 방이 없습니다.</div>';
+    }).join('') : '<div class="empty">사용 중인 테마가 없습니다.</div>';
     attachRoomEvents();
   }
   function applyState(data){

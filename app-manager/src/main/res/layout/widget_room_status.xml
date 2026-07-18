@@ -16,7 +16,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="방탈출 운영"
+            android:text="운영 대시보드"
             android:textColor="#FFFFFF"
             android:textSize="20sp"
             android:textStyle="bold" />

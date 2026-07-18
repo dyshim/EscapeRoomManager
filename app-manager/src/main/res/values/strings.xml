@@ -1,4 +1,4 @@
 <resources>
     <string name="app_name">EscapeRoom Manager</string>
-    <string name="widget_description">진행 중인 방의 남은 시간과 종료 예정 시각을 표시합니다.</string>
+    <string name="widget_description">진행 중인 테마의 남은 시간과 종료 예정 시각을 표시합니다.</string>
 </resources>

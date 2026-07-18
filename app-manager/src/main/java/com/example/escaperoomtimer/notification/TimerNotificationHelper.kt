@@ -26,7 +26,7 @@ object TimerNotificationHelper {
                 "타이머 진행 상태",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "진행 중인 방탈출 타이머를 상단바에 표시합니다."
+                description = "진행 중인 테마 타이머를 상단바에 표시합니다."
                 setShowBadge(false)
             }
 
@@ -39,11 +39,11 @@ object TimerNotificationHelper {
         createChannel(context)
 
         val room = selectNotificationRoom()
-        val title = room?.name ?: "방탈출 운영"
+        val title = room?.name ?: "운영 대시보드"
         val text = room?.let { roomInfo ->
             when (roomInfo.status) {
-                RoomStatus.WAITING -> "대기중"
-                RoomStatus.RUNNING -> "${formatTime(roomInfo.seconds)} 남음 · 진행중"
+                RoomStatus.WAITING -> "대기"
+                RoomStatus.RUNNING -> "${formatTime(roomInfo.seconds)} 남음 · 진행 중"
                 RoomStatus.WARNING -> "${formatTime(roomInfo.seconds)} 남음 · 5분 이하"
                 RoomStatus.PAUSED -> "${formatTime(roomInfo.seconds)} 남음 · 일시정지"
                 RoomStatus.FINISHED -> "종료"
