@@ -1,13 +1,14 @@
 package com.example.escaperoomtimer.ui.home
 
-import androidx.compose.foundation.BorderStroke
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,10 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,23 +28,32 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.escaperoomtimer.model.RoomInfo
 import com.example.escaperoomtimer.network.ManagerTcpServer
-import com.example.escaperoomtimer.ui.common.AddRoomDialog
 import com.example.escaperoomtimer.util.localIpv4Address
 import com.example.escaperoomtimer.util.nowText
 import com.example.escaperoomtimer.web.ManagerWebServer
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlinx.coroutines.delay
 
+private val DashboardBorder = Color(0xFF3A4147)
+private val DashboardMuted = Color(0xFFB5BBC1)
+private val ConnectionCyan = Color(0xFF00D7D0)
+private val ConnectionRed = Color(0xFFFF5252)
+
+@Suppress("UNUSED_PARAMETER")
 @Composable
 fun HomeScreen(
     rooms: List<RoomInfo>,
@@ -56,14 +63,12 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     var currentTime by remember { mutableStateOf(nowText()) }
-    var showAddDialog by remember { mutableStateOf(false) }
     var localIp by remember { mutableStateOf(localIpv4Address()) }
-    var webServerStatus by remember { mutableStateOf(ManagerWebServer.statusText()) }
     val uiPreferences = remember {
-        context.getSharedPreferences("manager_home_ui", android.content.Context.MODE_PRIVATE)
+        context.getSharedPreferences("manager_home_ui", Context.MODE_PRIVATE)
     }
     var serverInfoExpanded by remember {
-        mutableStateOf(uiPreferences.getBoolean("server_info_expanded", false))
+        mutableStateOf(uiPreferences.getBoolean("server_info_expanded", true))
     }
 
     LaunchedEffect(Unit) {
@@ -71,229 +76,257 @@ fun HomeScreen(
             delay(1000)
             currentTime = nowText()
             localIp = localIpv4Address()
-            webServerStatus = ManagerWebServer.statusText()
         }
     }
 
-    Column(
+    val guestCount = ManagerTcpServer.connectedDisplayCounts.values.sum()
+    val webCount = ManagerWebServer.connectedWebCount
+    val connected = localIp != "IP 확인 불가"
+    val tcpAddress = if (connected) "$localIp:45991" else "Wi-Fi 연결을 확인하세요"
+    val webAddress = if (connected) "http://$localIp:${ManagerWebServer.PORT}" else "Wi-Fi 연결을 확인하세요"
+
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
-            .padding(horizontal = 16.dp, vertical = 14.dp)
+            .padding(horizontal = 14.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 14.dp, bottom = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("☰", color = Color.White, fontSize = 32.sp)
-            Text("운영 대시보드", color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Bold)
-            Text(
-                text = "⚙",
-                color = Color.White,
-                fontSize = 27.sp,
-                modifier = Modifier.clickable(onClick = onSettingsClick)
+        item {
+            DashboardTopBar(onSettingsClick = onSettingsClick)
+        }
+        item {
+            CurrentTimeCard(currentTime = currentTime, connected = connected)
+        }
+        item {
+            ServerInfoCard(
+                expanded = serverInfoExpanded,
+                guestCount = guestCount,
+                webCount = webCount,
+                tcpAddress = tcpAddress,
+                webAddress = webAddress,
+                tcpRunning = connected,
+                webRunning = ManagerWebServer.isRunning,
+                onToggle = {
+                    serverInfoExpanded = !serverInfoExpanded
+                    uiPreferences.edit().putBoolean("server_info_expanded", serverInfoExpanded).apply()
+                },
+                onCopy = { label, value -> copyToClipboard(context, label, value) }
             )
         }
-
-        Spacer(Modifier.height(10.dp))
-        HorizontalDivider(color = Color(0xFF343B42))
-        Spacer(Modifier.height(10.dp))
-
-        CurrentTimeAndConnectionRow(
-            currentTime = currentTime,
-            connected = localIp != "IP 확인 불가"
-        )
-
-        Spacer(Modifier.height(10.dp))
-
-        val guestCount = ManagerTcpServer.connectedDisplayCounts.values.sum()
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, Color(0xFF46515A), RoundedCornerShape(12.dp))
-                .clickable {
-                    serverInfoExpanded = !serverInfoExpanded
-                    uiPreferences.edit()
-                        .putBoolean("server_info_expanded", serverInfoExpanded)
-                        .apply()
-                }
-                .padding(horizontal = 14.dp, vertical = 10.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("서버 정보", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "손님 ${guestCount}대 · 웹 ${ManagerWebServer.connectedWebCount}대",
-                        color = Color(0xFFABB3BA),
-                        fontSize = 12.sp
-                    )
-                    Text(
-                        text = if (serverInfoExpanded) "⌃" else "⌄",
-                        color = Color.White,
-                        fontSize = 20.sp,
-                        modifier = Modifier.padding(start = 10.dp)
-                    )
-                }
-            }
-
-            if (serverInfoExpanded) {
-                Spacer(Modifier.height(10.dp))
-                HorizontalDivider(color = Color(0xFF343B42))
-                Spacer(Modifier.height(8.dp))
-                ServerInfoLine("손님용 연결 주소", "$localIp:45991", Color(0xFF74C98C))
-                val webAddress = if (localIp == "IP 확인 불가") "Wi-Fi 연결을 확인하세요" else "http://$localIp:${ManagerWebServer.PORT}"
-                ServerInfoLine("PC 웹 주소", webAddress, Color(0xFF8DB9D8))
-                ServerInfoLine(
-                    "웹 서버",
-                    webServerStatus,
-                    if (ManagerWebServer.isRunning) Color(0xFF74C98C) else Color(0xFFD6A84A)
-                )
-                ServerInfoLine("웹 초기 PIN", "1234", Color(0xFFABB3BA))
-            }
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-        if (rooms.isEmpty()) {
-            Column(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text("사용 중인 테마가 없습니다.", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                Text("아래 버튼으로 테마를 추가하거나 설정에서 테마를 활성화하세요.", color = Color(0xFFC8D0D7), fontSize = 15.sp)
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                items(rooms, key = { it.id }) { room ->
-                    RoomCard(
-                        room = room,
-                        connectedDisplays = ManagerTcpServer.connectedCount(room.id),
-                        onClick = { onRoomClick(room) }
-                    )
-                }
-            }
-        }
-
-        Spacer(Modifier.height(8.dp))
-
-        Button(
-            onClick = {
-                showAddDialog = true
-            },
-            modifier = Modifier.fillMaxWidth().height(54.dp),
-            shape = RoundedCornerShape(12.dp),
-            border = BorderStroke(1.dp, Color(0xFF74C98C)),
-            colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent)
-        ) {
-            Text("+", color = Color(0xFF74C98C), fontSize = 30.sp, fontWeight = FontWeight.Bold)
-            Text(
-                "새 테마 추가",
-                color = Color(0xFF74C98C),
-                fontSize = 17.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(start = 8.dp)
+        item {
+            ThemeStatusCard(
+                rooms = rooms,
+                onRoomClick = onRoomClick
             )
         }
     }
+}
 
-    if (showAddDialog) {
-        AddRoomDialog(
-            suggestedName = "ROOM ${rooms.size + 1}",
-            onDismiss = { showAddDialog = false },
-            onConfirm = { name, minutes ->
-                onAddRoom(name, minutes)
-                showAddDialog = false
-            }
+@Composable
+private fun DashboardTopBar(onSettingsClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().height(52.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("☰", color = Color.White, fontSize = 30.sp)
+        Text(
+            "운영 대시보드",
+            color = Color.White,
+            fontSize = 23.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(start = 22.dp).weight(1f)
+        )
+        Text(
+            "⚙",
+            color = Color.White,
+            fontSize = 27.sp,
+            modifier = Modifier.clickable(onClick = onSettingsClick).padding(5.dp)
         )
     }
 }
 
 @Composable
-private fun CurrentTimeAndConnectionRow(
-    currentTime: String,
-    connected: Boolean
-) {
-    val date = currentTime.substringBefore(' ')
+private fun CurrentTimeCard(currentTime: String, connected: Boolean) {
     val time = currentTime.substringAfter(' ', currentTime)
-    val connectionColor = if (connected) Color(0xFF74C98C) else Color(0xFFE57373)
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+    val color = if (connected) ConnectionCyan else ConnectionRed
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, DashboardBorder, RoundedCornerShape(8.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(date, color = Color(0xFF969EA5), fontSize = 13.sp)
-            Text(
-                time,
-                color = Color.White,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(start = 8.dp)
-            )
-        }
+        Text(formatDashboardDate(), color = Color.White, fontSize = 14.sp)
         Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            HomeWifiIcon(color = connectionColor)
-            Text(
-                if (connected) "연결됨" else "연결 끊김",
-                color = connectionColor,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold
-            )
+            Text(time, color = Color.White, fontSize = 31.sp, fontWeight = FontWeight.Bold)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                HomeWifiIcon(color = color)
+                Text(
+                    if (connected) "연결됨" else "연결 안 됨",
+                    color = color,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(start = 7.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ServerInfoCard(
+    expanded: Boolean,
+    guestCount: Int,
+    webCount: Int,
+    tcpAddress: String,
+    webAddress: String,
+    tcpRunning: Boolean,
+    webRunning: Boolean,
+    onToggle: () -> Unit,
+    onCopy: (String, String) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, DashboardBorder, RoundedCornerShape(8.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("서버 정보", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.weight(1f))
+            Text("손님 ${guestCount}대 · 웹 ${webCount}대", color = DashboardMuted, fontSize = 13.sp)
+            Text(if (expanded) "⌃" else "⌄", color = Color.White, fontSize = 20.sp, modifier = Modifier.padding(start = 8.dp))
+        }
+        if (expanded) {
+            Spacer(Modifier.height(9.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, DashboardBorder, RoundedCornerShape(7.dp))
+            ) {
+                ServerAddressRow(
+                    label = "손님용 TCP",
+                    address = tcpAddress,
+                    running = tcpRunning,
+                    onCopy = { onCopy("손님용 TCP", tcpAddress) }
+                )
+                HorizontalDivider(color = DashboardBorder)
+                ServerAddressRow(
+                    label = "웹 대시보드",
+                    address = webAddress,
+                    running = webRunning,
+                    onCopy = { onCopy("웹 대시보드", webAddress) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ServerAddressRow(
+    label: String,
+    address: String,
+    running: Boolean,
+    onCopy: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().height(43.dp).padding(horizontal = 9.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Canvas(modifier = Modifier.size(8.dp)) {
+            drawCircle(if (running) ConnectionCyan else ConnectionRed)
+        }
+        Text(label, color = Color.White, fontSize = 13.sp, modifier = Modifier.padding(start = 9.dp))
+        Text(
+            address,
+            color = DashboardMuted,
+            fontSize = 12.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 8.dp).weight(1f)
+        )
+        CopyIcon(
+            modifier = Modifier.size(28.dp).clickable(onClick = onCopy).padding(5.dp),
+            color = Color.White
+        )
+    }
+}
+
+@Composable
+private fun ThemeStatusCard(
+    rooms: List<RoomInfo>,
+    onRoomClick: (RoomInfo) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, DashboardBorder, RoundedCornerShape(8.dp))
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("테마 현황", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.weight(1f))
+            Text("${rooms.size}개", color = DashboardMuted, fontSize = 16.sp)
+        }
+        HorizontalDivider(color = DashboardBorder, modifier = Modifier.padding(top = 5.dp))
+        if (rooms.isEmpty()) {
+            Column(
+                modifier = Modifier.fillMaxWidth().height(110.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("사용 중인 테마가 없습니다.", color = Color.White, fontSize = 16.sp)
+                Text("설정의 테마 관리에서 테마를 추가할 수 있습니다.", color = DashboardMuted, fontSize = 12.sp)
+            }
+        } else {
+            rooms.forEachIndexed { index, room ->
+                RoomCard(
+                    room = room,
+                    connectedDisplays = ManagerTcpServer.connectedCount(room.id),
+                    onClick = { onRoomClick(room) }
+                )
+                if (index < rooms.lastIndex) {
+                    HorizontalDivider(color = DashboardBorder)
+                }
+            }
         }
     }
 }
 
 @Composable
 private fun HomeWifiIcon(color: Color) {
-    Canvas(modifier = Modifier.size(width = 15.dp, height = 13.dp)) {
-        val stroke = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round)
-        drawArc(
-            color = color,
-            startAngle = 215f,
-            sweepAngle = 110f,
-            useCenter = false,
-            topLeft = Offset(size.width * 0.05f, 0f),
-            size = Size(size.width * 0.90f, size.height * 0.90f),
-            style = stroke
-        )
-        drawArc(
-            color = color,
-            startAngle = 215f,
-            sweepAngle = 110f,
-            useCenter = false,
-            topLeft = Offset(size.width * 0.28f, size.height * 0.32f),
-            size = Size(size.width * 0.44f, size.height * 0.44f),
-            style = stroke
-        )
-        drawCircle(
-            color = color,
-            radius = size.minDimension * 0.07f,
-            center = Offset(size.width / 2f, size.height * 0.88f)
-        )
+    Canvas(modifier = Modifier.size(width = 20.dp, height = 17.dp)) {
+        val stroke = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
+        drawArc(color, 215f, 110f, false, Offset(size.width * .05f, 0f), Size(size.width * .9f, size.height * .9f), style = stroke)
+        drawArc(color, 215f, 110f, false, Offset(size.width * .28f, size.height * .32f), Size(size.width * .44f, size.height * .44f), style = stroke)
+        drawCircle(color, radius = size.minDimension * .07f, center = Offset(size.width / 2f, size.height * .88f))
     }
 }
 
 @Composable
-private fun ServerInfoLine(label: String, value: String, valueColor: Color) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(label, color = Color(0xFFABB3BA), fontSize = 12.sp)
-        Text(value, color = valueColor, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+private fun CopyIcon(modifier: Modifier, color: Color) {
+    Canvas(modifier = modifier) {
+        val stroke = Stroke(width = 1.5.dp.toPx())
+        drawRect(color, topLeft = Offset(size.width * .12f, size.height * .08f), size = Size(size.width * .62f, size.height * .68f), style = stroke)
+        drawRect(color, topLeft = Offset(size.width * .28f, size.height * .25f), size = Size(size.width * .62f, size.height * .68f), style = stroke)
     }
 }
+
+private fun copyToClipboard(context: Context, label: String, value: String) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    clipboard.setPrimaryClip(ClipData.newPlainText(label, value))
+}
+
+private fun formatDashboardDate(): String =
+    SimpleDateFormat("yyyy.MM.dd (E)", Locale.KOREA).format(Date())

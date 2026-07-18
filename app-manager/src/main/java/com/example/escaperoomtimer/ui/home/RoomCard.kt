@@ -1,26 +1,27 @@
 package com.example.escaperoomtimer.ui.home
 
-import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.Text
 import com.example.escaperoomtimer.model.RoomInfo
 import com.example.escaperoomtimer.model.RoomStatus
 import com.example.escaperoomtimer.util.formatTime
@@ -28,167 +29,144 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+private val WaitingPurple = Color(0xFFB968F4)
+private val RunningGreen = Color(0xFF31D77B)
+private val ConnectionCyan = Color(0xFF00D7D0)
+private val PausedYellow = Color(0xFFFFD600)
+private val FinishedRed = Color(0xFFFF3B3B)
+private val MaintenanceBlue = Color(0xFF2196F3)
+
+private enum class DashboardRoomState { WAITING, RUNNING, PAUSED, FINISHED, MAINTENANCE }
+
 @Composable
 fun RoomCard(
     room: RoomInfo,
     connectedDisplays: Int,
     onClick: () -> Unit
 ) {
-    val timeText = if (room.isMaintenance) "유지보수" else formatTime(room.seconds)
-
-    val timeColor = if (room.isMaintenance) Color(0xFF64B5F6) else when (room.status) {
-        RoomStatus.WAITING -> Color(0xFF9E9E9E)
-        RoomStatus.FINISHED -> Color(0xFF777777)
-        RoomStatus.WARNING -> Color(0xFFFF4B4B)
-        RoomStatus.PAUSED -> Color(0xFFFFB000)
-        RoomStatus.RUNNING -> Color(0xFF42E66F)
+    val state = room.dashboardState()
+    val stateColor = when (state) {
+        DashboardRoomState.WAITING -> WaitingPurple
+        DashboardRoomState.RUNNING -> RunningGreen
+        DashboardRoomState.PAUSED -> PausedYellow
+        DashboardRoomState.FINISHED -> FinishedRed
+        DashboardRoomState.MAINTENANCE -> MaintenanceBlue
     }
 
-    val badgeText = if (room.isMaintenance) "유지보수" else when (room.status) {
-        RoomStatus.WAITING -> "대기"
-        RoomStatus.RUNNING -> "진행 중"
-        RoomStatus.WARNING -> if (room.isRunning) "5분 이하" else "일시정지"
-        RoomStatus.PAUSED -> "일시정지"
-        RoomStatus.FINISHED -> "종료"
-    }
-
-    val badgeColor = if (room.isMaintenance) Color(0xFF174A6E) else when (room.status) {
-        RoomStatus.WAITING -> Color(0xFF555555)
-        RoomStatus.RUNNING -> Color(0xFF0F4A1E)
-        RoomStatus.WARNING -> Color(0xFF5A1C1C)
-        RoomStatus.PAUSED -> Color(0xFF6A5300)
-        RoomStatus.FINISHED -> Color(0xFF444444)
-    }
-
-    val footer = when {
-        room.isMaintenance -> "운영 제외" to "손님 화면 숨김"
-        room.status == RoomStatus.WAITING ->
-            "기본 시간 ${formatTime(room.defaultMinutes * 60)}" to "시작 전"
-        room.status == RoomStatus.FINISHED ->
-            timestampLabel("시작", room.startedAtEpochMillis) to
-                timestampLabel("종료", room.finishedAtEpochMillis)
-        room.isRunning ->
-            timestampLabel("시작", room.startedAtEpochMillis) to
-                "종료 예정 ${formatClock(System.currentTimeMillis() + room.seconds * 1_000L)}"
-        else -> timestampLabel("시작", room.startedAtEpochMillis) to "현재 일시정지"
-    }
-
-    Card(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(146.dp)
-            .clickable { onClick() },
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF151B20)
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+            .height(76.dp)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = room.name,
-                    color = Color.White,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = timeText,
-                    color = timeColor,
-                    fontSize = if (room.isMaintenance) 29.sp else 35.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                when {
-                    room.isMaintenance -> Text(
-                        text = "손님용 선택에서 숨김",
-                        color = Color(0xFFB8C0C8),
-                        fontSize = 12.sp
+        RoomStateIcon(state = state, color = stateColor)
+        Column(modifier = Modifier.padding(start = 13.dp).weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(room.name, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                if (connectedDisplays > 0) {
+                    GuestDeviceIcon(
+                        color = ConnectionCyan,
+                        modifier = Modifier.padding(start = 10.dp).size(13.dp)
                     )
-                    room.status == RoomStatus.WAITING -> Text(
-                        text = if (connectedDisplays > 0) {
-                            "손님 기기 ${connectedDisplays}대 연결"
-                        } else {
-                            "시작 준비 완료"
-                        },
-                        color = if (connectedDisplays > 0) Color(0xFF74C98C) else Color(0xFFABB3BA),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    room.status != RoomStatus.WAITING && room.elapsedSeconds > 0 -> Text(
-                        text = "소요 시간 ${formatTime(room.elapsedSeconds)}",
-                        color = timeColor,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-                }
-
-                Column(
-                    horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.SpaceBetween
-                ) {
-                    androidx.compose.foundation.layout.Box(
-                        modifier = Modifier
-                            .background(badgeColor, RoundedCornerShape(8.dp))
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
-                    ) {
-                        Text(
-                            text = badgeText,
-                            color = Color.White,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
                     Text(
-                        text = "›",
-                        color = Color.White,
-                        fontSize = 32.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 8.dp)
+                        "$connectedDisplays",
+                        color = ConnectionCyan,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(start = 3.dp)
                     )
                 }
             }
-
-            HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 16.dp),
-                thickness = 1.dp,
-                color = Color(0xFF3A444C)
+            Text(
+                room.statusDescription(state),
+                color = stateColor,
+                fontSize = 13.sp,
+                maxLines = 1
             )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 16.dp, top = 5.dp, end = 48.dp, bottom = 7.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    footer.first,
-                    color = Color(0xFFABB3BA),
-                    fontSize = 11.sp
-                )
-                Text(
-                    footer.second,
-                    color = when {
-                        room.isRunning -> Color(0xFF74C98C)
-                        room.status == RoomStatus.PAUSED || !room.isRunning && room.status == RoomStatus.WARNING -> Color(0xFFD6A84A)
-                        else -> Color(0xFFABB3BA)
-                    },
-                    fontSize = 11.sp
-                )
+        }
+        Text(
+            if (state == DashboardRoomState.MAINTENANCE) "—" else formatTime(room.seconds),
+            color = Color.White,
+            fontSize = 23.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text("›", color = Color.White, fontSize = 30.sp, modifier = Modifier.padding(start = 8.dp))
+    }
+}
+
+private fun RoomInfo.dashboardState(): DashboardRoomState = when {
+    isMaintenance -> DashboardRoomState.MAINTENANCE
+    status == RoomStatus.FINISHED || seconds <= 0 -> DashboardRoomState.FINISHED
+    isRunning -> DashboardRoomState.RUNNING
+    status == RoomStatus.PAUSED || status == RoomStatus.WARNING -> DashboardRoomState.PAUSED
+    else -> DashboardRoomState.WAITING
+}
+
+private fun RoomInfo.statusDescription(state: DashboardRoomState): String = when (state) {
+    DashboardRoomState.WAITING -> "대기 · 기본 ${defaultMinutes}분"
+    DashboardRoomState.RUNNING -> "진행 중 · ${timestampLabel("시작", startedAtEpochMillis)}"
+    DashboardRoomState.PAUSED -> "일시정지 · 소요 ${formatTime(elapsedSeconds)}"
+    DashboardRoomState.FINISHED -> "종료 · ${timestampLabel("실제 종료", finishedAtEpochMillis)}"
+    DashboardRoomState.MAINTENANCE -> "유지보수 · 손님용 선택에서 숨김"
+}
+
+@Composable
+private fun RoomStateIcon(state: DashboardRoomState, color: Color) {
+    Canvas(modifier = Modifier.size(42.dp)) {
+        val stroke = Stroke(width = 2.2.dp.toPx(), cap = StrokeCap.Round)
+        drawCircle(color, style = stroke)
+        when (state) {
+            DashboardRoomState.WAITING -> {
+                drawLine(color, Offset(size.width * .35f, size.height * .27f), Offset(size.width * .65f, size.height * .27f), stroke.width, StrokeCap.Round)
+                drawLine(color, Offset(size.width * .35f, size.height * .73f), Offset(size.width * .65f, size.height * .73f), stroke.width, StrokeCap.Round)
+                val hourglass = Path().apply {
+                    moveTo(size.width * .38f, size.height * .30f)
+                    cubicTo(size.width * .39f, size.height * .43f, size.width * .46f, size.height * .46f, size.width * .50f, size.height * .50f)
+                    cubicTo(size.width * .54f, size.height * .54f, size.width * .61f, size.height * .57f, size.width * .62f, size.height * .70f)
+                    moveTo(size.width * .62f, size.height * .30f)
+                    cubicTo(size.width * .61f, size.height * .43f, size.width * .54f, size.height * .46f, size.width * .50f, size.height * .50f)
+                    cubicTo(size.width * .46f, size.height * .54f, size.width * .39f, size.height * .57f, size.width * .38f, size.height * .70f)
+                }
+                drawPath(hourglass, color, style = stroke)
+            }
+            DashboardRoomState.RUNNING -> {
+                val play = Path().apply {
+                    moveTo(size.width * .40f, size.height * .32f)
+                    lineTo(size.width * .68f, size.height * .50f)
+                    lineTo(size.width * .40f, size.height * .68f)
+                    close()
+                }
+                drawPath(play, color, style = stroke)
+            }
+            DashboardRoomState.PAUSED -> {
+                drawLine(color, Offset(size.width * .43f, size.height * .34f), Offset(size.width * .43f, size.height * .66f), stroke.width, StrokeCap.Round)
+                drawLine(color, Offset(size.width * .57f, size.height * .34f), Offset(size.width * .57f, size.height * .66f), stroke.width, StrokeCap.Round)
+            }
+            DashboardRoomState.FINISHED -> {
+                drawLine(color, Offset(size.width * .32f, size.height * .51f), Offset(size.width * .45f, size.height * .64f), stroke.width, StrokeCap.Round)
+                drawLine(color, Offset(size.width * .45f, size.height * .64f), Offset(size.width * .70f, size.height * .37f), stroke.width, StrokeCap.Round)
+            }
+            DashboardRoomState.MAINTENANCE -> {
+                drawLine(color, Offset(size.width * .35f, size.height * .68f), Offset(size.width * .66f, size.height * .36f), stroke.width, StrokeCap.Round)
+                drawCircle(color, radius = size.width * .07f, center = Offset(size.width * .35f, size.height * .68f), style = stroke)
+                drawArc(color, 20f, 210f, false, Offset(size.width * .50f, size.height * .25f), Size(size.width * .20f, size.height * .20f), style = stroke)
             }
         }
     }
 }
 
-private fun formatClock(epochMillis: Long): String =
-    SimpleDateFormat("HH:mm", Locale.KOREA).format(Date(epochMillis))
+@Composable
+private fun GuestDeviceIcon(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val stroke = Stroke(width = 1.4.dp.toPx())
+        drawRoundRect(color, cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx()), style = stroke)
+        drawCircle(color, radius = 0.8.dp.toPx(), center = Offset(size.width / 2f, size.height * .86f))
+    }
+}
 
 private fun timestampLabel(label: String, epochMillis: Long?): String =
     epochMillis?.let { "$label ${formatClock(it)}" } ?: "$label --:--"
+
+private fun formatClock(epochMillis: Long): String =
+    SimpleDateFormat("HH:mm", Locale.KOREA).format(Date(epochMillis))
