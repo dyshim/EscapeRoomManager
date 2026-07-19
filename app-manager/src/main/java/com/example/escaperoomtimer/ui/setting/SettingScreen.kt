@@ -793,11 +793,13 @@ private fun SettingMenuCard(
         colors = CardDefaults.cardColors(containerColor = AppSurface)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 17.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 15.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            SettingMenuIcon(icon = icon, color = color)
-            Column(modifier = Modifier.weight(1f).padding(start = 18.dp)) {
+            Box(modifier = Modifier.size(44.dp), contentAlignment = Alignment.Center) {
+                SettingMenuIcon(icon = icon, color = color)
+            }
+            Column(modifier = Modifier.weight(1f).padding(start = 14.dp, end = 6.dp)) {
                 Text(title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(3.dp))
                 Text(
@@ -812,21 +814,21 @@ private fun SettingMenuCard(
                 Text(
                     text = it,
                     color = color,
-                    fontSize = 13.sp,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier
                         .background(color.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 8.dp, vertical = 5.dp)
+                        .padding(horizontal = 7.dp, vertical = 4.dp)
                 )
             }
-            Text("›", color = Color.White, fontSize = 30.sp, modifier = Modifier.padding(start = 10.dp))
+            Text("›", color = Color.White, fontSize = 28.sp, modifier = Modifier.padding(start = 6.dp))
         }
     }
 }
 
 @Composable
 private fun SettingMenuIcon(icon: SettingIcon, color: Color) {
-    Canvas(modifier = Modifier.size(48.dp)) {
+    Canvas(modifier = Modifier.size(44.dp)) {
         val stroke = Stroke(width = 2.2.dp.toPx(), cap = StrokeCap.Round)
         val w = size.width
         val h = size.height
@@ -1345,12 +1347,12 @@ private fun RoomSummaryCard(
         colors = CardDefaults.cardColors(containerColor = Color(0xFF151B20))
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 15.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(room.name, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text(room.name, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(3.dp))
                 Text(statusText, color = statusColor, fontSize = 13.sp, maxLines = 1)
             }
@@ -1371,7 +1373,7 @@ private fun RoomSummaryCard(
                         uncheckedTrackColor = Color(0xFF454B51)
                     )
                 )
-                Text("›", color = Color.White, fontSize = 30.sp, modifier = Modifier.padding(start = 8.dp))
+                Text("›", color = Color.White, fontSize = 28.sp, modifier = Modifier.padding(start = 6.dp))
             }
         }
     }
