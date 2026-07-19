@@ -3,6 +3,7 @@ package com.example.escaperoomtimer.ui.home
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -323,8 +324,14 @@ private fun CopyIcon(modifier: Modifier, color: Color) {
 }
 
 private fun copyToClipboard(context: Context, label: String, value: String) {
+    if (value == "Wi-Fi 연결을 확인하세요") {
+        Toast.makeText(context, "Wi-Fi 연결 후 주소를 복사해 주세요.", Toast.LENGTH_SHORT).show()
+        return
+    }
+
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     clipboard.setPrimaryClip(ClipData.newPlainText(label, value))
+    Toast.makeText(context, "$label 주소를 복사했습니다.", Toast.LENGTH_SHORT).show()
 }
 
 private fun formatDashboardDate(): String =
