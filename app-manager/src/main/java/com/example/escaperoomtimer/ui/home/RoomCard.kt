@@ -24,17 +24,11 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Text
 import com.example.escaperoomtimer.model.RoomInfo
 import com.example.escaperoomtimer.model.RoomStatus
+import com.example.escaperoomtimer.ui.common.ManagerStatusColors
 import com.example.escaperoomtimer.util.formatTime
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-
-private val WaitingPurple = Color(0xFFB968F4)
-private val RunningGreen = Color(0xFF31D77B)
-private val ConnectionCyan = Color(0xFF00D7D0)
-private val PausedYellow = Color(0xFFFFD600)
-private val FinishedRed = Color(0xFFFF3B3B)
-private val MaintenanceBlue = Color(0xFF2196F3)
 
 private enum class DashboardRoomState { WAITING, RUNNING, PAUSED, FINISHED, MAINTENANCE }
 
@@ -46,11 +40,11 @@ fun RoomCard(
 ) {
     val state = room.dashboardState()
     val stateColor = when (state) {
-        DashboardRoomState.WAITING -> WaitingPurple
-        DashboardRoomState.RUNNING -> RunningGreen
-        DashboardRoomState.PAUSED -> PausedYellow
-        DashboardRoomState.FINISHED -> FinishedRed
-        DashboardRoomState.MAINTENANCE -> MaintenanceBlue
+        DashboardRoomState.WAITING -> ManagerStatusColors.Waiting
+        DashboardRoomState.RUNNING -> ManagerStatusColors.Running
+        DashboardRoomState.PAUSED -> ManagerStatusColors.Paused
+        DashboardRoomState.FINISHED -> ManagerStatusColors.Finished
+        DashboardRoomState.MAINTENANCE -> ManagerStatusColors.Maintenance
     }
 
     Row(
@@ -67,12 +61,12 @@ fun RoomCard(
                 Text(room.name, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 if (connectedDisplays > 0) {
                     GuestDeviceIcon(
-                        color = ConnectionCyan,
+                        color = ManagerStatusColors.Connected,
                         modifier = Modifier.padding(start = 10.dp).size(13.dp)
                     )
                     Text(
                         "$connectedDisplays",
-                        color = ConnectionCyan,
+                        color = ManagerStatusColors.Connected,
                         fontSize = 12.sp,
                         modifier = Modifier.padding(start = 3.dp)
                     )
@@ -105,9 +99,12 @@ private fun RoomInfo.dashboardState(): DashboardRoomState = when {
 
 private fun RoomInfo.statusDescription(state: DashboardRoomState): String = when (state) {
     DashboardRoomState.WAITING -> "대기 · 기본 ${defaultMinutes}분"
-    DashboardRoomState.RUNNING -> "진행 중 · ${timestampLabel("시작", startedAtEpochMillis)}"
+    DashboardRoomState.RUNNING ->
+        "진행 중 · 종료 예정 ${formatClock(System.currentTimeMillis() + seconds * 1_000L)}"
     DashboardRoomState.PAUSED -> "일시정지 · 소요 ${formatTime(elapsedSeconds)}"
-    DashboardRoomState.FINISHED -> "종료 · ${timestampLabel("실제 종료", finishedAtEpochMillis)}"
+    DashboardRoomState.FINISHED -> finishedAtEpochMillis?.let {
+        "종료 · 실제 종료 ${formatClock(it)}"
+    } ?: "종료"
     DashboardRoomState.MAINTENANCE -> "유지보수 · 손님용 선택에서 숨김"
 }
 
@@ -164,9 +161,6 @@ private fun GuestDeviceIcon(color: Color, modifier: Modifier = Modifier) {
         drawCircle(color, radius = 0.8.dp.toPx(), center = Offset(size.width / 2f, size.height * .86f))
     }
 }
-
-private fun timestampLabel(label: String, epochMillis: Long?): String =
-    epochMillis?.let { "$label ${formatClock(it)}" } ?: "$label --:--"
 
 private fun formatClock(epochMillis: Long): String =
     SimpleDateFormat("HH:mm", Locale.KOREA).format(Date(epochMillis))

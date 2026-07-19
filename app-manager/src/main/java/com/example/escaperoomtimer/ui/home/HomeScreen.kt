@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.escaperoomtimer.model.RoomInfo
 import com.example.escaperoomtimer.network.ManagerTcpServer
+import com.example.escaperoomtimer.ui.common.ManagerStatusColors
 import com.example.escaperoomtimer.util.localIpv4Address
 import com.example.escaperoomtimer.util.nowText
 import com.example.escaperoomtimer.web.ManagerWebServer
@@ -50,8 +51,6 @@ import kotlinx.coroutines.delay
 
 private val DashboardBorder = Color(0xFF3A4147)
 private val DashboardMuted = Color(0xFFB5BBC1)
-private val ConnectionCyan = Color(0xFF00D7D0)
-private val ConnectionRed = Color(0xFFFF5252)
 
 @Suppress("UNUSED_PARAMETER")
 @Composable
@@ -150,7 +149,7 @@ private fun DashboardTopBar(onSettingsClick: () -> Unit) {
 @Composable
 private fun CurrentTimeCard(currentTime: String, connected: Boolean) {
     val time = currentTime.substringAfter(' ', currentTime)
-    val color = if (connected) ConnectionCyan else ConnectionRed
+    val color = if (connected) ManagerStatusColors.Connected else ManagerStatusColors.Disconnected
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -242,7 +241,7 @@ private fun ServerAddressRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Canvas(modifier = Modifier.size(8.dp)) {
-            drawCircle(if (running) ConnectionCyan else ConnectionRed)
+            drawCircle(if (running) ManagerStatusColors.Connected else ManagerStatusColors.Disconnected)
         }
         Text(label, color = Color.White, fontSize = 13.sp, modifier = Modifier.padding(start = 9.dp))
         Text(

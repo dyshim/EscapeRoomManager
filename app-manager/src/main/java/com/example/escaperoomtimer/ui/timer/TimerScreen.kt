@@ -23,11 +23,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -37,6 +40,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -48,6 +52,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.KeyboardType
@@ -56,11 +61,13 @@ import androidx.compose.ui.unit.sp
 import com.example.escaperoomtimer.alarm.ManagerGameEndAlarmController
 import com.example.escaperoomtimer.manager.TimerManager
 import com.example.escaperoomtimer.model.RoomStatus
+import com.example.escaperoomtimer.ui.common.ManagerStatusColors
 import com.example.escaperoomtimer.util.formatTime
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.abs
 
 private const val TIMER_UI_PREFS = "manager_timer_ui"
 private const val KEY_TIME_ADJUSTMENT_EXPANDED = "time_adjustment_expanded"
@@ -130,61 +137,54 @@ fun TimerScreen(
                     .align(Alignment.CenterStart)
                     .clickable { onBack() }
             )
-            Text(
-                text = room.name,
-                color = Color.White,
-                fontSize = 30.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.align(Alignment.Center)
-            )
-            WifiConnectionStatus(
+            Row(
+                modifier = Modifier.align(Alignment.Center),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = room.name,
+                    color = Color.White,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                StatusBadge(room.status, room.isRunning, room.isMaintenance)
+            }
+            WifiStatusIcon(
                 connected = wifiConnected,
+                color = if (wifiConnected) ManagerStatusColors.Connected else ManagerStatusColors.Disconnected,
                 modifier = Modifier.align(Alignment.CenterEnd)
             )
         }
 
-        Spacer(Modifier.height(24.dp))
-        StatusBadge(room.status, room.isRunning, room.isMaintenance)
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(12.dp))
 
-        Text(
-            text = "남은 시간",
-            color = Color(0xFFD7DEE4),
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = formatTime(room.seconds),
-            color = timerColor(room.seconds, room.status, room.isMaintenance),
-            fontSize = 78.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = "소요 시간 ${formatTime(room.elapsedSeconds)}",
-            color = Color(0xFF9EA7AD),
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Bold
-        )
-        if (room.status == RoomStatus.FINISHED && alarmActive) {
-            Spacer(Modifier.height(12.dp))
-            TimerButton(
-                text = "알람 끄기",
-                color = Color(0xFF9B211B),
-                modifier = Modifier.fillMaxWidth(),
-                onClick = ManagerGameEndAlarmController::stop
-            )
-        }
-
-        Spacer(Modifier.height(18.dp))
-
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF171C20), RoundedCornerShape(14.dp))
-                .padding(horizontal = 12.dp, vertical = 16.dp),
-            contentAlignment = Alignment.Center
+                .background(Color(0xFF11171B), RoundedCornerShape(14.dp))
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Text(
+                text = if (room.status == RoomStatus.WAITING) "기본 시간" else "남은 시간",
+                color = Color(0xFFD7DEE4),
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = if (room.isMaintenance) "—" else formatTime(room.seconds),
+                color = timerColor(room.seconds, room.status, room.isMaintenance),
+                fontSize = 48.sp,
+                fontWeight = FontWeight.Bold
+            )
+            if (!room.isMaintenance) {
+                Text(text = "분 : 초", color = Color(0xFF8F989F), fontSize = 12.sp)
+            }
+            HorizontalDivider(
+                modifier = Modifier.padding(top = 10.dp, bottom = 10.dp),
+                color = Color(0xFF343D44)
+            )
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -192,15 +192,12 @@ fun TimerScreen(
             ) {
                 TimerClockInfo(
                     label = "시작 시간",
-                    value = recordedTimeText(room.startedAtEpochMillis, "시작 후 표시"),
+                    value = recordedTimeText(room.startedAtEpochMillis, "-"),
                     modifier = Modifier.weight(1f)
                 )
+                Box(modifier = Modifier.size(width = 1.dp, height = 40.dp).background(Color(0xFF343D44)))
                 TimerClockInfo(
-                    label = if (room.status == RoomStatus.FINISHED || room.seconds <= 0) {
-                        "종료 시간"
-                    } else {
-                        "종료 예정"
-                    },
+                    label = if (room.status == RoomStatus.FINISHED || room.seconds <= 0) "실제 종료" else "종료 예정",
                     value = expectedEndTimeText(
                         seconds = room.seconds,
                         status = room.status,
@@ -210,9 +207,30 @@ fun TimerScreen(
                     modifier = Modifier.weight(1f)
                 )
             }
+            HorizontalDivider(
+                modifier = Modifier.padding(top = 10.dp, bottom = 8.dp),
+                color = Color(0xFF343D44)
+            )
+            Text(
+                text = "소요 시간  ${formatTime(room.elapsedSeconds)}",
+                color = Color(0xFFB7BEC4),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+        if (room.status == RoomStatus.FINISHED && alarmActive) {
+            Spacer(Modifier.height(12.dp))
+            OutlinedButton(
+                onClick = ManagerGameEndAlarmController::stop,
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape = RoundedCornerShape(12.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, ManagerStatusColors.Finished)
+            ) {
+                Text("⊘  알람 끄기", color = ManagerStatusColors.Finished, fontSize = 15.sp)
+            }
         }
 
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(12.dp))
 
         if (room.isMaintenance) {
             Box(
@@ -229,24 +247,39 @@ fun TimerScreen(
                     fontWeight = FontWeight.Bold
                 )
             }
-        } else if (room.status != RoomStatus.FINISHED && room.seconds > 0) {
-            TimerButton(
-                text = when {
-                    room.isRunning -> "Ⅱ 일시정지"
-                    room.status == RoomStatus.PAUSED -> "▶ 계속"
-                    else -> "▶ 시작"
-                },
-                color = if (room.isRunning) Color(0xFFC96D00) else Color(0xFF0D6B24),
-                modifier = Modifier.fillMaxWidth(),
-                onClick = { TimerManager.startOrPause(room.id) }
-            )
+        } else {
+            if (room.status != RoomStatus.FINISHED && room.seconds > 0) {
+                TimerButton(
+                    text = when {
+                        room.isRunning -> "Ⅱ 일시정지"
+                        room.status == RoomStatus.PAUSED -> "▶ 계속"
+                        else -> "▶ 시작"
+                    },
+                    color = when {
+                        room.isRunning -> Color(0xFFFFC107)
+                        room.status == RoomStatus.PAUSED -> Color(0xFF16C967)
+                        else -> Color(0xFF7134C8)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { TimerManager.startOrPause(room.id) }
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+            OutlinedButton(
+                onClick = { resetConfirmationVisible = true },
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape = RoundedCornerShape(12.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF7D858B))
+            ) {
+                Text("↺  초기화", color = Color.White, fontSize = 15.sp)
+            }
         }
 
         Spacer(Modifier.height(18.dp))
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF171C20), RoundedCornerShape(14.dp))
+                .background(Color(0xFF11171B), RoundedCornerShape(12.dp))
                 .padding(14.dp)
         ) {
             Row(
@@ -263,7 +296,7 @@ fun TimerScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("시간 조정", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text(if (timeAdjustmentExpanded) "⌃" else "›", color = Color.White, fontSize = 18.sp)
+                Text(if (timeAdjustmentExpanded) "⌃" else "⌄", color = Color.White, fontSize = 18.sp)
             }
 
             if (timeAdjustmentExpanded) {
@@ -296,13 +329,13 @@ fun TimerScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     TimerButton(
                         text = "시간 추가",
-                        color = Color(0xFF0D6B24),
+                        color = Color(0xFF16C967),
                         modifier = Modifier.weight(1f),
                         onClick = { adjustTime(adjustmentOptions[adjustmentIndex]) }
                     )
                     TimerButton(
                         text = "시간 차감",
-                        color = Color(0xFFC96D00),
+                        color = Color(0xFFFF414D),
                         modifier = Modifier.weight(1f),
                         onClick = { adjustTime(-adjustmentOptions[adjustmentIndex]) }
                     )
@@ -331,71 +364,70 @@ fun TimerScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF171C20), RoundedCornerShape(12.dp))
+                .background(Color(0xFF11171B), RoundedCornerShape(12.dp))
                 .clickable { directInputExpanded = !directInputExpanded }
                 .padding(horizontal = 16.dp, vertical = 15.dp),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text("남은 시간 직접 설정", color = Color.White, fontWeight = FontWeight.Bold)
-            Text(if (directInputExpanded) "⌃" else "›", color = Color.White)
+            Text(if (directInputExpanded) "⌃" else "⌄", color = Color.White)
         }
 
         if (directInputExpanded) {
-            Spacer(Modifier.height(10.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            Spacer(Modifier.height(6.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF11171B), RoundedCornerShape(10.dp))
+                    .padding(14.dp)
             ) {
-                OutlinedTextField(
-                    value = minuteInput,
-                    onValueChange = { minuteInput = it.filter(Char::isDigit).take(3) },
-                    modifier = Modifier.weight(1f),
-                    label = { Text("분") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    DirectTimeInput(
+                        value = minuteInput,
+                        onValueChange = { minuteInput = it },
+                        modifier = Modifier.weight(1f),
+                        label = "분",
+                        maxValue = 999,
+                        maxDigits = 3
+                    )
+                    Text(":", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                    DirectTimeInput(
+                        value = secondInput,
+                        onValueChange = { secondInput = it },
+                        modifier = Modifier.weight(1f),
+                        label = "초",
+                        maxValue = 59,
+                        maxDigits = 2
+                    )
+                }
+                Text(
+                    "위아래로 밀거나 숫자를 눌러 입력하세요.",
+                    color = Color(0xFF9EA7AD),
+                    fontSize = 12.sp,
+                    modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 4.dp, bottom = 8.dp)
                 )
-                OutlinedTextField(
-                    value = secondInput,
-                    onValueChange = { secondInput = it.filter(Char::isDigit).take(2) },
-                    modifier = Modifier.weight(1f),
-                    label = { Text("초") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                TimerButton(
+                    text = "입력 시간 적용",
+                    color = Color(0xFF7134C8),
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        val minutes = minuteInput.toIntOrNull()?.coerceIn(0, 999) ?: 0
+                        val seconds = secondInput.toIntOrNull()?.coerceIn(0, 59) ?: 0
+                        rememberBeforeChange()
+                        TimerManager.setTime(room.id, minutes * 60 + seconds)
+                    }
                 )
             }
-            Spacer(Modifier.height(8.dp))
-            TimerButton(
-                text = "입력 시간 적용",
-                color = Color(0xFF4E2D78),
-                modifier = Modifier.fillMaxWidth(),
-                onClick = {
-                    val minutes = minuteInput.toIntOrNull()?.coerceIn(0, 999) ?: 0
-                    val seconds = secondInput.toIntOrNull()?.coerceIn(0, 59) ?: 0
-                    rememberBeforeChange()
-                    TimerManager.setTime(room.id, minutes * 60 + seconds)
-                }
-            )
         }
-
-        Spacer(Modifier.height(12.dp))
-        OutlinedButton(
-            onClick = { resetConfirmationVisible = true },
-            modifier = Modifier.fillMaxWidth().height(56.dp),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Text("↺ 기본 시간으로 초기화", fontSize = 17.sp, fontWeight = FontWeight.Bold)
-        }
-        Text(
-            text = "설정된 기본 시간 ${formatTime(room.defaultMinutes * 60)}",
-            color = Color(0xFF8C959B),
-            fontSize = 13.sp,
-            modifier = Modifier.padding(top = 5.dp)
-        )
 
         if (resetConfirmationVisible) {
             AlertDialog(
                 onDismissRequest = { resetConfirmationVisible = false },
-                title = { Text("기본 시간으로 초기화") },
+                title = { Text("초기화") },
                 text = {
                     Text(
                         "남은 시간을 ${formatTime(room.defaultMinutes * 60)}으로 되돌릴까요?\n" +
@@ -449,6 +481,91 @@ private data class UndoSnapshot(
 )
 
 @Composable
+private fun DirectTimeInput(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    label: String,
+    maxValue: Int,
+    maxDigits: Int
+) {
+    var dragDistance by remember { mutableFloatStateOf(0f) }
+
+    fun changeBy(delta: Int) {
+        val current = value.toIntOrNull() ?: 0
+        onValueChange((current + delta).coerceIn(0, maxValue).toString())
+    }
+
+    Column(
+        modifier = modifier.pointerInput(value, maxValue) {
+            detectVerticalDragGestures(
+                onVerticalDrag = { change, amount ->
+                    change.consume()
+                    dragDistance += amount
+                    if (abs(dragDistance) >= 24f) {
+                        changeBy(if (dragDistance < 0f) 1 else -1)
+                        dragDistance = 0f
+                    }
+                },
+                onDragEnd = { dragDistance = 0f },
+                onDragCancel = { dragDistance = 0f }
+            )
+        },
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(label, color = Color(0xFFD7DEE4), fontSize = 12.sp)
+        Text(
+            "⌃",
+            color = Color(0xFF7134C8),
+            fontSize = 22.sp,
+            modifier = Modifier.clickable { changeBy(1) }.padding(horizontal = 30.dp, vertical = 3.dp)
+        )
+        Text(
+            text = ((value.toIntOrNull() ?: 0) - 1).coerceAtLeast(0).toString(),
+            color = Color(0xFF687078),
+            fontSize = 17.sp
+        )
+        BasicTextField(
+            value = value,
+            onValueChange = { input ->
+                val digits = input.filter(Char::isDigit).take(maxDigits)
+                if (digits.isEmpty()) {
+                    onValueChange("")
+                } else {
+                    onValueChange(digits.toInt().coerceAtMost(maxValue).toString())
+                }
+            },
+            singleLine = true,
+            textStyle = androidx.compose.ui.text.TextStyle(
+                color = Color.White,
+                fontSize = 22.sp,
+                textAlign = TextAlign.Center,
+                fontWeight = FontWeight.Bold
+            ),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+            decorationBox = { innerTextField ->
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    innerTextField()
+                    HorizontalDivider(color = Color(0xFF7134C8), modifier = Modifier.padding(top = 3.dp))
+                }
+            }
+        )
+        Text(
+            text = ((value.toIntOrNull() ?: 0) + 1).coerceAtMost(maxValue).toString(),
+            color = Color(0xFF687078),
+            fontSize = 17.sp
+        )
+        Text(
+            "⌄",
+            color = Color(0xFF7134C8),
+            fontSize = 22.sp,
+            modifier = Modifier.clickable { changeBy(-1) }.padding(horizontal = 30.dp, vertical = 3.dp)
+        )
+    }
+}
+
+@Composable
 private fun rememberWifiConnected(): Boolean {
     val context = LocalContext.current
     val connectivityManager = remember(context) {
@@ -500,7 +617,7 @@ private fun WifiConnectionStatus(
     connected: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val color = if (connected) Color(0xFF74C98C) else Color(0xFFE57373)
+    val color = if (connected) ManagerStatusColors.Connected else ManagerStatusColors.Disconnected
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -519,9 +636,10 @@ private fun WifiConnectionStatus(
 @Composable
 private fun WifiStatusIcon(
     connected: Boolean,
-    color: Color
+    color: Color,
+    modifier: Modifier = Modifier
 ) {
-    Canvas(modifier = Modifier.size(width = 15.dp, height = 13.dp)) {
+    Canvas(modifier = modifier.size(width = 15.dp, height = 13.dp)) {
         val stroke = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round)
         drawArc(
             color = color,
@@ -571,14 +689,14 @@ private fun TimerClockInfo(
         Text(
             text = label,
             color = Color(0xFFD7DEE4),
-            fontSize = 15.sp,
+            fontSize = 12.sp,
             fontWeight = FontWeight.Bold
         )
         Spacer(Modifier.height(5.dp))
         Text(
             text = value,
             color = Color.White,
-            fontSize = 20.sp,
+            fontSize = 16.sp,
             fontWeight = FontWeight.Bold,
             maxLines = 1
         )
@@ -614,25 +732,25 @@ fun StatusBadge(status: RoomStatus, isRunning: Boolean, isMaintenance: Boolean =
     val label = if (isMaintenance) "유지보수" else when (status) {
         RoomStatus.WAITING -> "대기"
         RoomStatus.RUNNING -> "진행 중"
-        RoomStatus.WARNING -> if (isRunning) "5분 이하" else "일시정지"
+        RoomStatus.WARNING -> if (isRunning) "진행 중" else "일시정지"
         RoomStatus.PAUSED -> "일시정지"
         RoomStatus.FINISHED -> "종료"
     }
 
-    val color = if (isMaintenance) Color(0xFF174A6E) else when (status) {
-        RoomStatus.WAITING -> Color(0xFF555555)
-        RoomStatus.RUNNING -> Color(0xFF0F4A1E)
-        RoomStatus.WARNING -> Color(0xFF5A1C1C)
-        RoomStatus.PAUSED -> Color(0xFF6A5300)
-        RoomStatus.FINISHED -> Color(0xFF444444)
+    val color = if (isMaintenance) ManagerStatusColors.Maintenance else when (status) {
+        RoomStatus.WAITING -> ManagerStatusColors.Waiting
+        RoomStatus.RUNNING -> ManagerStatusColors.Running
+        RoomStatus.WARNING -> if (isRunning) ManagerStatusColors.Running else ManagerStatusColors.Paused
+        RoomStatus.PAUSED -> ManagerStatusColors.Paused
+        RoomStatus.FINISHED -> ManagerStatusColors.Finished
     }
 
     Box(
         modifier = Modifier
-            .background(color, RoundedCornerShape(999.dp))
-            .padding(horizontal = 18.dp, vertical = 8.dp)
+            .background(color.copy(alpha = 0.18f), RoundedCornerShape(999.dp))
+            .padding(horizontal = 8.dp, vertical = 4.dp)
     ) {
-        Text(label, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        Text(label, color = color, fontSize = 10.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -645,11 +763,11 @@ fun TimerButton(
 ) {
     Button(
         onClick = onClick,
-        modifier = modifier.height(62.dp),
+        modifier = modifier.height(50.dp),
         shape = RoundedCornerShape(12.dp),
         colors = ButtonDefaults.buttonColors(containerColor = color)
     ) {
-        Text(text, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text(text, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -661,8 +779,8 @@ private fun expectedEndTimeText(
 ): String {
     return when {
         status == RoomStatus.FINISHED || seconds <= 0 ->
-            recordedTimeText(finishedAtEpochMillis, "기록 없음")
-        status == RoomStatus.WAITING -> "시작 후 표시"
+            recordedTimeText(finishedAtEpochMillis, "-")
+        status == RoomStatus.WAITING -> "-"
         !isRunning -> "일시정지 중"
         else -> {
             val endAtMillis = System.currentTimeMillis() + seconds * 1_000L
@@ -675,15 +793,15 @@ private fun recordedTimeText(epochMillis: Long?, emptyText: String): String =
     epochMillis?.let(::formatClockTime) ?: emptyText
 
 private fun formatClockTime(epochMillis: Long): String =
-    SimpleDateFormat("a h:mm:ss", Locale.KOREA).format(Date(epochMillis))
+    SimpleDateFormat("HH:mm", Locale.KOREA).format(Date(epochMillis))
 
 private fun adjustmentLabel(seconds: Int): String =
     if (seconds < 60) "${seconds}초" else "${seconds / 60}분"
 
 fun timerColor(seconds: Int, status: RoomStatus, isMaintenance: Boolean = false): Color {
     return when {
-        isMaintenance -> Color(0xFF64B5F6)
-        status == RoomStatus.FINISHED || seconds <= 0 -> Color(0xFFFF4B4B)
+        isMaintenance -> ManagerStatusColors.Maintenance
+        status == RoomStatus.FINISHED || seconds <= 0 -> ManagerStatusColors.Finished
         seconds <= 5 * 60 -> Color(0xFFFF4B4B)
         seconds <= 10 * 60 -> Color(0xFFFFA726)
         else -> Color(0xFF42E66F)
