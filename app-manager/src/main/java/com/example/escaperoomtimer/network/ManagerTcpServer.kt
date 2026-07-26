@@ -56,6 +56,9 @@ object ManagerTcpServer {
 
     @Volatile private var serverSocket: ServerSocket? = null
 
+    val isRunning: Boolean
+        get() = running.get() && serverSocket?.isBound == true && serverSocket?.isClosed == false
+
     @Synchronized
     fun start() {
         if (!running.compareAndSet(false, true)) {

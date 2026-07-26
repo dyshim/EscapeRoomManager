@@ -44,6 +44,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -140,6 +141,7 @@ fun SettingScreen(
     var exitInProgress by remember { mutableStateOf(false) }
     var localIp by remember { mutableStateOf(localIpv4Address()) }
     var webServerStatus by remember { mutableStateOf(ManagerWebServer.statusText()) }
+    var lastServerCheckedAt by remember { mutableStateOf(System.currentTimeMillis()) }
 
     var presetName by remember { mutableStateOf("") }
     var presetSeconds by remember { mutableStateOf(60 * 60) }
@@ -240,6 +242,7 @@ fun SettingScreen(
             while (true) {
                 localIp = localIpv4Address()
                 webServerStatus = ManagerWebServer.statusText()
+                lastServerCheckedAt = System.currentTimeMillis()
                 delay(1000)
             }
         }
@@ -268,11 +271,12 @@ fun SettingScreen(
         HorizontalDivider(color = Color(0xFF2A2F35))
         Spacer(Modifier.height(14.dp))
 
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            when (currentPage) {
+        key(currentPage) {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                when (currentPage) {
                 SettingPage.MENU -> {
                     item {
                         SettingsMenu(
@@ -526,8 +530,10 @@ fun SettingScreen(
                     ServerConnectionCard(
                         rooms = rooms,
                         localIp = localIp,
-                        webServerStatus = webServerStatus
+                        webServerStatus = webServerStatus,
+                        lastCheckedAt = lastServerCheckedAt
                     )
+                }
                 }
             }
         }
@@ -1221,57 +1227,155 @@ private fun EmptyPresetCard() {
 private fun ServerConnectionCard(
     rooms: List<RoomInfo>,
     localIp: String,
-    webServerStatus: String
+    webServerStatus: String,
+    lastCheckedAt: Long
 ) {
     val context = LocalContext.current
+    var troubleshootingExpanded by remember { mutableStateOf(false) }
     val guestCount = ManagerTcpServer.connectedDisplayCounts.values.sum()
     val validIp = localIp != "IP 확인 불가"
+    val tcpRunning = ManagerTcpServer.isRunning
+    val webRunning = ManagerWebServer.isRunning
     val tcpAddress = if (validIp) "$localIp:45991" else "주소 확인 불가"
     val webAddress = if (validIp) "http://$localIp:${ManagerWebServer.PORT}" else "주소 확인 불가"
+    val checkedTime = remember(lastCheckedAt) {
+        SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(lastCheckedAt))
+    }
     val connectedRooms = rooms.mapNotNull { room ->
         ManagerTcpServer.connectedDisplayCounts[room.id]
             ?.takeIf { it > 0 }
             ?.let { count -> room.name to count }
     }
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, Color(0xFF31554F)),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF151B20))
-    ) {
-        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("현재 서버 상태", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
-            Text("주소는 확인용이며 이 화면에서는 변경할 수 없습니다.", color = Color(0xFF9AA3AC), fontSize = 13.sp)
-            HorizontalDivider(color = Color(0xFF344048))
-            ServerInfoRow("Wi-Fi", if (validIp) "연결됨" else "연결 안 됨", if (validIp) Color(0xFF79D892) else Color(0xFFE57373))
-            ServerInfoRow(
-                "손님용 TCP",
-                tcpAddress,
-                Color(0xFF73D5C8),
-                onCopy = if (validIp) {
-                    { copyServerAddress(context, "손님용 TCP", tcpAddress) }
-                } else null
-            )
-            ServerInfoRow(
-                "웹 대시보드",
-                webAddress,
-                Color(0xFF75B8F3),
-                onCopy = if (validIp) {
-                    { copyServerAddress(context, "웹 대시보드", webAddress) }
-                } else null
-            )
-            ServerInfoRow("연결 기기", "손님 ${guestCount}대 · 웹 ${ManagerWebServer.connectedWebCount}대", Color.White)
-            ServerInfoRow("웹 서버", webServerStatus, if (ManagerWebServer.isRunning) Color(0xFF79D892) else Color(0xFFF0BD55))
-            if (connectedRooms.isNotEmpty()) {
-                HorizontalDivider(color = Color(0xFF344048))
-                Text("테마별 손님 기기", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                connectedRooms.forEach { (roomName, count) ->
-                    ServerInfoRow(roomName, "${count}대", Color(0xFF73D5C8))
+    val summary = when {
+        !validIp -> Triple("네트워크 연결 안 됨", "Wi-Fi와 서버 상태를 확인해 주세요.", Color(0xFFFF5252))
+        tcpRunning && webRunning -> Triple("서버 정상", "손님용 ${guestCount}대 · 웹 ${ManagerWebServer.connectedWebCount}대", Color(0xFF8BE35A))
+        else -> Triple("일부 기능 확인 필요", "TCP ${if (tcpRunning) "정상" else "확인 필요"} · 웹 ${if (webRunning) "정상" else "확인 필요"}", Color(0xFFFFB000))
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        ServerStatusSummary(
+            title = summary.first,
+            description = summary.second,
+            checkedTime = checkedTime,
+            color = summary.third
+        )
+        ServerServiceCard(
+            title = "손님용 TCP 서버",
+            running = tcpRunning,
+            addressLabel = "서버 주소",
+            address = tcpAddress,
+            connectionLabel = "연결된 손님용 기기",
+            connectionValue = "${guestCount}대",
+            onCopy = if (validIp) { { copyServerAddress(context, "손님용 TCP", tcpAddress) } } else null
+        )
+        ServerServiceCard(
+            title = "웹 대시보드",
+            running = webRunning,
+            addressLabel = "접속 주소",
+            address = webAddress,
+            connectionLabel = "현재 접속자",
+            connectionValue = "${ManagerWebServer.connectedWebCount}명",
+            onCopy = if (validIp) { { copyServerAddress(context, "웹 대시보드", webAddress) } } else null,
+            statusDetail = webServerStatus
+        )
+        if (connectedRooms.isNotEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, Color(0xFF3A4650)),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF151B20))
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("테마별 연결 기기", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    connectedRooms.forEach { (roomName, count) ->
+                        ServerInfoRow(roomName, "${count}대", Color(0xFF73D5C8))
+                    }
                 }
             }
-            Text("상태는 1초마다 자동으로 갱신됩니다.", color = Color(0xFF8D96A0), fontSize = 11.sp)
+        }
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            border = BorderStroke(1.dp, Color(0xFF3A4650)),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF151B20))
+        ) {
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth().clickable { troubleshootingExpanded = !troubleshootingExpanded }.padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("연결이 안 될 때 확인할 항목", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    Text(if (troubleshootingExpanded) "⌃" else "⌄", color = Color(0xFFB8C0C8), fontSize = 18.sp)
+                }
+                if (troubleshootingExpanded) {
+                    HorizontalDivider(color = Color(0xFF344048))
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                        TroubleshootingItem("직원용 기기와 손님용 기기가 같은 Wi-Fi인지 확인")
+                        TroubleshootingItem("손님용 앱의 서버 주소와 포트 확인")
+                        TroubleshootingItem("직원용 앱이 실행 중인지 확인")
+                        TroubleshootingItem("공유기 또는 Wi-Fi 연결 상태 확인")
+                    }
+                }
+            }
+        }
+        Text("상태는 1초마다 자동으로 갱신됩니다.", color = Color(0xFF8D96A0), fontSize = 11.sp)
+    }
+}
+
+@Composable
+private fun ServerStatusSummary(title: String, description: String, checkedTime: String, color: Color) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.7f)),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF151B20))
+    ) {
+        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("●", color = color, fontSize = 24.sp)
+            Column(modifier = Modifier.padding(start = 12.dp)) {
+                Text(title, color = color, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                Text(description, color = Color(0xFFD5DBE0), fontSize = 13.sp)
+                Text("마지막 확인 $checkedTime", color = Color(0xFF8D96A0), fontSize = 11.sp)
+            }
         }
     }
+}
+
+@Composable
+private fun ServerServiceCard(
+    title: String,
+    running: Boolean,
+    addressLabel: String,
+    address: String,
+    connectionLabel: String,
+    connectionValue: String,
+    onCopy: (() -> Unit)?,
+    statusDetail: String? = null
+) {
+    val statusColor = if (running) Color(0xFF8BE35A) else Color(0xFFFFB000)
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, Color(0xFF3A4650)),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF151B20))
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text("● ${if (running) "실행 중" else "확인 필요"}", color = statusColor, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            }
+            ServerInfoRow(addressLabel, address, Color(0xFFDDE3E8), onCopy)
+            HorizontalDivider(color = Color(0xFF344048))
+            ServerInfoRow(connectionLabel, connectionValue, Color.White)
+            statusDetail?.let { Text(it, color = Color(0xFF8D96A0), fontSize = 11.sp) }
+        }
+    }
+}
+
+@Composable
+private fun TroubleshootingItem(text: String) {
+    Text("• $text", color = Color(0xFFB8C1C9), fontSize = 12.sp, lineHeight = 17.sp)
 }
 
 @Composable
