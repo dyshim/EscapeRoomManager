@@ -27,6 +27,10 @@ object ManagerGameEndAlarmController {
     @Synchronized
     fun play(context: Context) {
         val settings = ManagerAlarmPreferences.load(context)
+        if (!settings.enabled) {
+            stop()
+            return
+        }
         playInternal(
             context = context,
             soundUri = resolveSoundUri(settings.soundUri),

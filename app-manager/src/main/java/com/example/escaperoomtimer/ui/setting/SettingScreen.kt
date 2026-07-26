@@ -155,6 +155,13 @@ fun SettingScreen(
     var showAddRoomDialog by remember { mutableStateOf(false) }
     val storeInfoChanged = storeName.trim() != savedStoreInfo.storeName ||
         branchName.trim() != savedStoreInfo.branchName
+    val alarmSettings = ManagerAlarmPreferences.load(context)
+    val alarmEnabled = alarmSettings.enabled
+    val serverMenuStatus = when {
+        localIp == "IP 확인 불가" -> "연결 안 됨"
+        ManagerTcpServer.isRunning && ManagerWebServer.isRunning -> "정상"
+        else -> "확인 필요"
+    }
     val backupFileName = remember(savedStoreInfo) {
         val storePart = listOf(savedStoreInfo.storeName, savedStoreInfo.branchName)
             .filter { it.isNotBlank() }
@@ -281,6 +288,8 @@ fun SettingScreen(
                     item {
                         SettingsMenu(
                             storeInfoConfigured = savedStoreInfo.storeName.isNotBlank(),
+                            alarmEnabled = alarmEnabled,
+                            serverStatus = serverMenuStatus,
                             presetCount = presets.size,
                             roomCount = rooms.size,
                             onPageSelected = { currentPage = it },
@@ -731,6 +740,8 @@ private fun SettingTopBar(page: SettingPage, onBack: () -> Unit) {
 @Composable
 private fun SettingsMenu(
     storeInfoConfigured: Boolean,
+    alarmEnabled: Boolean,
+    serverStatus: String,
     presetCount: Int,
     roomCount: Int,
     onPageSelected: (SettingPage) -> Unit,
@@ -742,7 +753,7 @@ private fun SettingsMenu(
             description = "매장명과 지점 정보를 관리합니다.",
             color = Color(0xFFFF765C),
             icon = SettingIcon.STORE,
-            badge = if (storeInfoConfigured) "설정됨" else null,
+            badge = if (storeInfoConfigured) "설정됨" else "미설정",
             onClick = { onPageSelected(SettingPage.STORE) }
         )
         SettingMenuCard(
@@ -750,6 +761,7 @@ private fun SettingsMenu(
             description = "타이머 종료 알림과 소리를 설정합니다.",
             color = Color(0xFFF0BD55),
             icon = SettingIcon.BELL,
+            badge = if (alarmEnabled) "사용 중" else "사용 안 함",
             onClick = { onPageSelected(SettingPage.ALARM) }
         )
         SettingMenuCard(
@@ -788,6 +800,7 @@ private fun SettingsMenu(
             description = "손님용 TCP와 웹 서버 정보를 확인합니다.",
             color = Color(0xFF73D5C8),
             icon = SettingIcon.SERVER,
+            badge = serverStatus,
             onClick = { onPageSelected(SettingPage.SERVER) }
         )
         Text("앱", color = Color(0xFF8D96A0), fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
