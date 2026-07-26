@@ -155,8 +155,6 @@ fun SettingScreen(
     var showAddRoomDialog by remember { mutableStateOf(false) }
     val storeInfoChanged = storeName.trim() != savedStoreInfo.storeName ||
         branchName.trim() != savedStoreInfo.branchName
-    val alarmSettings = ManagerAlarmPreferences.load(context)
-    val alarmEnabled = alarmSettings.enabled
     val webPinUsesDefault = WebAdminPinPreferences.isDefaultPin(context)
     val serverMenuStatus = when {
         localIp == "IP 확인 불가" -> "연결 안 됨"
@@ -289,7 +287,6 @@ fun SettingScreen(
                     item {
                         SettingsMenu(
                             storeInfoConfigured = savedStoreInfo.storeName.isNotBlank(),
-                            alarmEnabled = alarmEnabled,
                             webPinUsesDefault = webPinUsesDefault,
                             serverStatus = serverMenuStatus,
                             presetCount = presets.size,
@@ -433,6 +430,7 @@ fun SettingScreen(
                         itemsIndexed(presets, key = { _, preset -> preset.id }) { index, preset ->
                             PresetCard(
                                 preset = preset,
+                                position = index + 1,
                                 ordering = reorderPresets,
                                 canMoveUp = index > 0,
                                 canMoveDown = index < presets.lastIndex,
@@ -742,7 +740,6 @@ private fun SettingTopBar(page: SettingPage, onBack: () -> Unit) {
 @Composable
 private fun SettingsMenu(
     storeInfoConfigured: Boolean,
-    alarmEnabled: Boolean,
     webPinUsesDefault: Boolean,
     serverStatus: String,
     presetCount: Int,
@@ -764,7 +761,6 @@ private fun SettingsMenu(
             description = "타이머 종료 알림과 소리를 설정합니다.",
             color = Color(0xFFF0BD55),
             icon = SettingIcon.BELL,
-            badge = if (alarmEnabled) "사용 중" else "사용 안 함",
             onClick = { onPageSelected(SettingPage.ALARM) }
         )
         SettingMenuCard(
@@ -1480,6 +1476,7 @@ private fun PresetEditorCard(
 @Composable
 private fun PresetCard(
     preset: ThemePreset,
+    position: Int,
     ordering: Boolean,
     canMoveUp: Boolean,
     canMoveDown: Boolean,
@@ -1488,6 +1485,7 @@ private fun PresetCard(
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit
 ) {
+    var showMoveMenu by remember(preset.id) { mutableStateOf(false) }
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
@@ -1500,14 +1498,62 @@ private fun PresetCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(preset.name, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    if (ordering) "$position   ${preset.name}" else preset.name,
+                    color = Color.White,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold
+                )
                 Text("기본 ${formatDefaultTime(preset.defaultSeconds)}", color = Color(0xFF9AA3AC), fontSize = 13.sp)
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (ordering) {
-                    OutlinedButton(onClick = onMoveUp, enabled = canMoveUp) { Text("↑ 위") }
-                    OutlinedButton(onClick = onMoveDown, enabled = canMoveDown) { Text("↓ 아래") }
-                } else {
+            if (ordering) {
+                Box {
+                    Text(
+                        "⠿",
+                        color = Color(0xFFBF91EA),
+                        fontSize = 28.sp,
+                        modifier = Modifier
+                            .padding(8.dp)
+                            .pointerInput(preset.id, canMoveUp, canMoveDown) {
+                                var drag = 0f
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = { drag = 0f },
+                                    onDrag = { change, amount ->
+                                        change.consume()
+                                        drag += amount.y
+                                        if (drag <= -36f && canMoveUp) {
+                                            onMoveUp()
+                                            drag = 0f
+                                        } else if (drag >= 36f && canMoveDown) {
+                                            onMoveDown()
+                                            drag = 0f
+                                        }
+                                    }
+                                )
+                            }
+                            .clickable { showMoveMenu = true }
+                    )
+                    DropdownMenu(expanded = showMoveMenu, onDismissRequest = { showMoveMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("↑  위로 이동") },
+                            enabled = canMoveUp,
+                            onClick = {
+                                showMoveMenu = false
+                                onMoveUp()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("↓  아래로 이동") },
+                            enabled = canMoveDown,
+                            onClick = {
+                                showMoveMenu = false
+                                onMoveDown()
+                            }
+                        )
+                    }
+                }
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     OutlinedButton(onClick = onEdit) { Text("수정") }
                     TextButton(onClick = onDelete) { Text("삭제", color = Color(0xFFFF6B6B)) }
                 }
