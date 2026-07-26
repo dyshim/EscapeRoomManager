@@ -42,17 +42,18 @@ object TimerManager {
 
     fun getRoom(roomId: String): RoomInfo? = rooms.firstOrNull { it.id == roomId }
 
-    fun addRoom(name: String, defaultMinutes: Int): String {
+    fun addRoom(name: String, defaultSeconds: Int): String {
         val cleanName = RoomRepository.sanitizeRoomName(name)
-        val cleanMinutes = RoomRepository.sanitizeDefaultMinutes(defaultMinutes)
+        val cleanSeconds = RoomRepository.sanitizeDefaultSeconds(defaultSeconds)
         val id = nextRoomId()
         rooms.add(
             RoomInfo(
                 id = id,
                 name = cleanName,
-                seconds = cleanMinutes * 60,
+                seconds = cleanSeconds,
                 status = RoomStatus.WAITING,
-                defaultMinutes = cleanMinutes,
+                defaultMinutes = cleanSeconds / 60,
+                defaultSeconds = cleanSeconds,
                 isEnabled = true
             )
         )
@@ -114,7 +115,7 @@ object TimerManager {
     fun start(roomId: String) {
         updateRoom(roomId) { room ->
             if (!room.isEnabled || room.isMaintenance || room.isRunning) return@updateRoom room
-            val startSeconds = if (room.seconds <= 0) room.defaultMinutes * 60 else room.seconds
+            val startSeconds = if (room.seconds <= 0) room.defaultSeconds else room.seconds
             room.copy(
                 seconds = startSeconds,
                 isRunning = true,
@@ -130,7 +131,7 @@ object TimerManager {
             if (!room.isEnabled || room.isMaintenance || (room.status == RoomStatus.FINISHED && room.seconds <= 0)) {
                 return@updateRoom room
             }
-            val fixedSeconds = if (room.seconds <= 0) room.defaultMinutes * 60 else room.seconds
+            val fixedSeconds = if (room.seconds <= 0) room.defaultSeconds else room.seconds
             val nextRunning = !room.isRunning
             room.copy(
                 seconds = fixedSeconds,
@@ -209,7 +210,7 @@ object TimerManager {
     fun reset(roomId: String) {
         updateRoom(roomId) { room ->
             room.copy(
-                seconds = room.defaultMinutes * 60,
+                seconds = room.defaultSeconds,
                 isRunning = false,
                 status = RoomStatus.WAITING,
                 startedAtEpochMillis = null,
@@ -219,15 +220,16 @@ object TimerManager {
         }
     }
 
-    fun updateRoomSetting(roomId: String, name: String, defaultMinutes: Int) {
+    fun updateRoomSetting(roomId: String, name: String, defaultSeconds: Int) {
         updateRoom(roomId) { room ->
             val cleanName = RoomRepository.sanitizeRoomName(name)
-            val cleanMinutes = RoomRepository.sanitizeDefaultMinutes(defaultMinutes)
+            val cleanSeconds = RoomRepository.sanitizeDefaultSeconds(defaultSeconds)
             val shouldResetTime = !room.isRunning && room.status != RoomStatus.PAUSED
             room.copy(
                 name = cleanName,
-                defaultMinutes = cleanMinutes,
-                seconds = if (shouldResetTime) cleanMinutes * 60 else room.seconds,
+                defaultMinutes = cleanSeconds / 60,
+                defaultSeconds = cleanSeconds,
+                seconds = if (shouldResetTime) cleanSeconds else room.seconds,
                 status = if (shouldResetTime) RoomStatus.WAITING else room.status,
                 startedAtEpochMillis = if (shouldResetTime) null else room.startedAtEpochMillis,
                 finishedAtEpochMillis = if (shouldResetTime) null else room.finishedAtEpochMillis,

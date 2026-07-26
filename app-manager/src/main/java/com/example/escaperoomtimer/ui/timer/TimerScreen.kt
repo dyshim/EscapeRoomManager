@@ -62,6 +62,7 @@ import com.example.escaperoomtimer.alarm.ManagerGameEndAlarmController
 import com.example.escaperoomtimer.manager.TimerManager
 import com.example.escaperoomtimer.model.RoomStatus
 import com.example.escaperoomtimer.ui.common.ManagerStatusColors
+import com.example.escaperoomtimer.ui.common.TimeWheelInput
 import com.example.escaperoomtimer.util.formatTime
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
@@ -386,7 +387,7 @@ fun TimerScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    DirectTimeInput(
+                    TimeWheelInput(
                         value = minuteInput,
                         onValueChange = { minuteInput = it },
                         modifier = Modifier.weight(1f),
@@ -395,7 +396,7 @@ fun TimerScreen(
                         maxDigits = 3
                     )
                     Text(":", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                    DirectTimeInput(
+                    TimeWheelInput(
                         value = secondInput,
                         onValueChange = { secondInput = it },
                         modifier = Modifier.weight(1f),
@@ -430,7 +431,7 @@ fun TimerScreen(
                 title = { Text("초기화") },
                 text = {
                     Text(
-                        "남은 시간을 ${formatTime(room.defaultMinutes * 60)}으로 되돌릴까요?\n" +
+                        "남은 시간을 ${formatTime(room.defaultSeconds)}으로 되돌릴까요?\n" +
                             "시작 및 종료 시간 기록도 초기화됩니다."
                     )
                 },
@@ -440,8 +441,8 @@ fun TimerScreen(
                 confirmButton = {
                     TextButton(onClick = {
                         TimerManager.reset(room.id)
-                        minuteInput = room.defaultMinutes.toString()
-                        secondInput = "0"
+                        minuteInput = (room.defaultSeconds / 60).toString()
+                        secondInput = (room.defaultSeconds % 60).toString()
                         resetConfirmationVisible = false
                     }) { Text("초기화", color = Color(0xFF9C6ADE)) }
                 }
@@ -479,91 +480,6 @@ private data class UndoSnapshot(
     val startedAtEpochMillis: Long?,
     val finishedAtEpochMillis: Long?
 )
-
-@Composable
-private fun DirectTimeInput(
-    value: String,
-    onValueChange: (String) -> Unit,
-    modifier: Modifier = Modifier,
-    label: String,
-    maxValue: Int,
-    maxDigits: Int
-) {
-    var dragDistance by remember { mutableFloatStateOf(0f) }
-
-    fun changeBy(delta: Int) {
-        val current = value.toIntOrNull() ?: 0
-        onValueChange((current + delta).coerceIn(0, maxValue).toString())
-    }
-
-    Column(
-        modifier = modifier.pointerInput(value, maxValue) {
-            detectVerticalDragGestures(
-                onVerticalDrag = { change, amount ->
-                    change.consume()
-                    dragDistance += amount
-                    if (abs(dragDistance) >= 24f) {
-                        changeBy(if (dragDistance < 0f) 1 else -1)
-                        dragDistance = 0f
-                    }
-                },
-                onDragEnd = { dragDistance = 0f },
-                onDragCancel = { dragDistance = 0f }
-            )
-        },
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(label, color = Color(0xFFD7DEE4), fontSize = 12.sp)
-        Text(
-            "⌃",
-            color = Color(0xFF7134C8),
-            fontSize = 22.sp,
-            modifier = Modifier.clickable { changeBy(1) }.padding(horizontal = 30.dp, vertical = 3.dp)
-        )
-        Text(
-            text = ((value.toIntOrNull() ?: 0) - 1).coerceAtLeast(0).toString(),
-            color = Color(0xFF687078),
-            fontSize = 17.sp
-        )
-        BasicTextField(
-            value = value,
-            onValueChange = { input ->
-                val digits = input.filter(Char::isDigit).take(maxDigits)
-                if (digits.isEmpty()) {
-                    onValueChange("")
-                } else {
-                    onValueChange(digits.toInt().coerceAtMost(maxValue).toString())
-                }
-            },
-            singleLine = true,
-            textStyle = androidx.compose.ui.text.TextStyle(
-                color = Color.White,
-                fontSize = 22.sp,
-                textAlign = TextAlign.Center,
-                fontWeight = FontWeight.Bold
-            ),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-            decorationBox = { innerTextField ->
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    innerTextField()
-                    HorizontalDivider(color = Color(0xFF7134C8), modifier = Modifier.padding(top = 3.dp))
-                }
-            }
-        )
-        Text(
-            text = ((value.toIntOrNull() ?: 0) + 1).coerceAtMost(maxValue).toString(),
-            color = Color(0xFF687078),
-            fontSize = 17.sp
-        )
-        Text(
-            "⌄",
-            color = Color(0xFF7134C8),
-            fontSize = 22.sp,
-            modifier = Modifier.clickable { changeBy(-1) }.padding(horizontal = 30.dp, vertical = 3.dp)
-        )
-    }
-}
 
 @Composable
 private fun rememberWifiConnected(): Boolean {

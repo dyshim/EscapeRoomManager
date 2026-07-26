@@ -7,6 +7,7 @@ data class RoomInfo(
     val status: RoomStatus,
     val isRunning: Boolean = false,
     val defaultMinutes: Int = 60,
+    val defaultSeconds: Int = defaultMinutes * 60,
     val hintEnabled: Boolean = true,
     val guestScreenEnabled: Boolean = true,
     val isEnabled: Boolean = true,

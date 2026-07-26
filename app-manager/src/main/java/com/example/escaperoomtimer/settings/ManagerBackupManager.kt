@@ -92,6 +92,7 @@ object ManagerBackupManager {
                     put("id", room.id)
                     put("name", room.name)
                     put("defaultMinutes", room.defaultMinutes)
+                    put("defaultSeconds", room.defaultSeconds)
                     put("hintEnabled", room.hintEnabled)
                     put("guestScreenEnabled", room.guestScreenEnabled)
                     put("isEnabled", room.isEnabled)
@@ -128,13 +129,17 @@ object ManagerBackupManager {
                 val id = item.getString("id").trim()
                 val name = item.getString("name").trim()
                 require(id.isNotBlank() && name.isNotBlank()) { "잘못된 테마 정보가 있습니다." }
-                val minutes = item.optInt("defaultMinutes", 60).coerceIn(1, 240)
+                val seconds = item.optInt(
+                    "defaultSeconds",
+                    item.optInt("defaultMinutes", 60).coerceIn(1, 240) * 60
+                ).coerceIn(1, 240 * 60)
                 add(RoomInfo(
                     id = id,
                     name = name,
-                    seconds = minutes * 60,
+                    seconds = seconds,
                     status = RoomStatus.WAITING,
-                    defaultMinutes = minutes,
+                    defaultMinutes = seconds / 60,
+                    defaultSeconds = seconds,
                     hintEnabled = item.optBoolean("hintEnabled", true),
                     guestScreenEnabled = item.optBoolean("guestScreenEnabled", true),
                     isEnabled = item.optBoolean("isEnabled", true),

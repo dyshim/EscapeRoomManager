@@ -34,12 +34,11 @@ private val AddRoomAccent = Color(0xFF74C98C)
 fun AddRoomDialog(
     suggestedName: String,
     onDismiss: () -> Unit,
-    onConfirm: (name: String, defaultMinutes: Int) -> Unit
+    onConfirm: (name: String, defaultSeconds: Int) -> Unit
 ) {
     var roomName by remember(suggestedName) { mutableStateOf(suggestedName) }
-    var roomMinutes by remember { mutableStateOf("60") }
+    var roomSeconds by remember { mutableStateOf(60 * 60) }
     var validationMessage by remember { mutableStateOf<String?>(null) }
-    val selectedMinutes = roomMinutes.toIntOrNull()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -72,43 +71,13 @@ fun AddRoomDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("기본 시간", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        listOf(45, 60, 90).forEach { minutes ->
-                            val selected = selectedMinutes == minutes
-                            OutlinedButton(
-                                onClick = {
-                                    roomMinutes = minutes.toString()
-                                    validationMessage = null
-                                },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(10.dp),
-                                border = BorderStroke(1.dp, if (selected) AddRoomAccent else Color(0xFF46515A)),
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    containerColor = if (selected) AddRoomAccent.copy(alpha = 0.14f) else Color.Transparent,
-                                    contentColor = if (selected) AddRoomAccent else Color(0xFFB8C0C8)
-                                )
-                            ) { Text("${minutes}분", fontWeight = FontWeight.SemiBold) }
-                        }
-                    }
-                }
-
-                OutlinedTextField(
-                    value = roomMinutes,
-                    onValueChange = {
-                        roomMinutes = it.filter(Char::isDigit).take(3)
+                Text("기본 시간", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                DefaultTimePicker(
+                    totalSeconds = roomSeconds,
+                    onSecondsChange = {
+                        roomSeconds = it
                         validationMessage = null
-                    },
-                    label = { Text("직접 입력") },
-                    suffix = { Text("분") },
-                    supportingText = { Text("1분에서 240분까지 설정할 수 있어요.") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth()
+                    }
                 )
 
                 validationMessage?.let { message ->
@@ -128,11 +97,10 @@ fun AddRoomDialog(
             Button(
                 onClick = {
                     val cleanName = roomName.trim()
-                    val minutes = roomMinutes.toIntOrNull()
                     when {
                         cleanName.isBlank() -> validationMessage = "테마 이름을 입력해 주세요."
-                        minutes == null || minutes !in 1..240 -> validationMessage = "기본 시간을 1~240분 사이로 입력해 주세요."
-                        else -> onConfirm(cleanName, minutes)
+                        roomSeconds !in 1..240 * 60 -> validationMessage = "기본 시간을 확인해 주세요."
+                        else -> onConfirm(cleanName, roomSeconds)
                     }
                 },
                 shape = RoundedCornerShape(10.dp),

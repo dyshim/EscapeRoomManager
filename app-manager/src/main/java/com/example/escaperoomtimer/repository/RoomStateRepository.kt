@@ -21,6 +21,7 @@ object RoomStateRepository {
                 put("status", room.status.name)
                 put("isRunning", room.isRunning)
                 put("defaultMinutes", room.defaultMinutes)
+                put("defaultSeconds", room.defaultSeconds)
                 put("hintEnabled", room.hintEnabled)
                 put("guestScreenEnabled", room.guestScreenEnabled)
                 put("isEnabled", room.isEnabled)
@@ -75,7 +76,11 @@ object RoomStateRepository {
                                 isRunning = restoredRunning
                             ),
                             isRunning = restoredRunning,
-                            defaultMinutes = item.optInt("defaultMinutes", 60).coerceIn(1, 240),
+                            defaultMinutes = item.optInt("defaultMinutes", 60).coerceIn(0, 240),
+                            defaultSeconds = item.optInt(
+                                "defaultSeconds",
+                                item.optInt("defaultMinutes", 60).coerceIn(1, 240) * 60
+                            ).coerceIn(1, 240 * 60),
                             hintEnabled = item.optBoolean("hintEnabled", true),
                             guestScreenEnabled = item.optBoolean("guestScreenEnabled", true),
                             isEnabled = item.optBoolean("isEnabled", true),

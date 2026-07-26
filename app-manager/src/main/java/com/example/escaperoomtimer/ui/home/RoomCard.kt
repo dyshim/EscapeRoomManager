@@ -25,6 +25,7 @@ import androidx.compose.material3.Text
 import com.example.escaperoomtimer.model.RoomInfo
 import com.example.escaperoomtimer.model.RoomStatus
 import com.example.escaperoomtimer.ui.common.ManagerStatusColors
+import com.example.escaperoomtimer.ui.common.formatDefaultTime
 import com.example.escaperoomtimer.util.formatTime
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -98,7 +99,7 @@ private fun RoomInfo.dashboardState(): DashboardRoomState = when {
 }
 
 private fun RoomInfo.statusDescription(state: DashboardRoomState): String = when (state) {
-    DashboardRoomState.WAITING -> "대기 · 기본 ${defaultMinutes}분"
+    DashboardRoomState.WAITING -> "대기 · 기본 ${formatDefaultTime(defaultSeconds)}"
     DashboardRoomState.RUNNING ->
         "진행 중 · 종료 예정 ${formatClock(System.currentTimeMillis() + seconds * 1_000L)}"
     DashboardRoomState.PAUSED -> "일시정지 · 소요 ${formatTime(elapsedSeconds)}"

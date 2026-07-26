@@ -8,4 +8,6 @@ object RoomRepository {
     fun sanitizeDefaultMinutes(minutes: Int): Int {
         return minutes.coerceIn(1, 240)
     }
+
+    fun sanitizeDefaultSeconds(seconds: Int): Int = seconds.coerceIn(1, 240 * 60)
 }

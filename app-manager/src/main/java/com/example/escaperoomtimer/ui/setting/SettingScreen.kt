@@ -7,6 +7,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +30,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -49,6 +52,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -68,6 +72,8 @@ import com.example.escaperoomtimer.settings.StoreInfo
 import com.example.escaperoomtimer.settings.StoreInfoPreferences
 import com.example.escaperoomtimer.settings.WebAdminPinPreferences
 import com.example.escaperoomtimer.ui.common.AddRoomDialog
+import com.example.escaperoomtimer.ui.common.DefaultTimePicker
+import com.example.escaperoomtimer.ui.common.formatDefaultTime
 import com.example.escaperoomtimer.ui.theme.AppBlack
 import com.example.escaperoomtimer.ui.theme.AppSurface
 import com.example.escaperoomtimer.util.localIpv4Address
@@ -200,7 +206,7 @@ fun SettingScreen(
     LaunchedEffect(rooms.map { it.id to it.name }) {
         rooms.forEach { room ->
             if (nameInputs[room.id] == null) nameInputs[room.id] = room.name
-            if (minuteInputs[room.id] == null) minuteInputs[room.id] = room.defaultMinutes.toString()
+            if (minuteInputs[room.id] == null) minuteInputs[room.id] = room.defaultSeconds.toString()
         }
         val ids = rooms.mapTo(mutableSetOf()) { it.id }
         nameInputs.keys.toList().filterNot(ids::contains).forEach { nameInputs.remove(it) }
@@ -456,6 +462,7 @@ fun SettingScreen(
                         itemsIndexed(rooms, key = { _, room -> room.id }) { index, room ->
                             RoomSummaryCard(
                                 room = room,
+                                position = index + 1,
                                 ordering = reorderRooms,
                                 canMoveUp = index > 0,
                                 canMoveDown = index < rooms.lastIndex,
@@ -482,15 +489,15 @@ fun SettingScreen(
                             RoomSettingCard(
                                 room = selectedRoom,
                                 nameValue = nameInputs[selectedRoom.id] ?: selectedRoom.name,
-                                minutesValue = minuteInputs[selectedRoom.id] ?: selectedRoom.defaultMinutes.toString(),
+                                secondsValue = (minuteInputs[selectedRoom.id]?.toIntOrNull() ?: selectedRoom.defaultSeconds),
                                 hasPresets = presets.isNotEmpty(),
                                 onNameChange = { nameInputs[selectedRoom.id] = it },
-                                onMinutesChange = { minuteInputs[selectedRoom.id] = it.filter(Char::isDigit).take(3) },
+                                onSecondsChange = { minuteInputs[selectedRoom.id] = it.toString() },
                                 onChoosePreset = { roomForPresetDialog = selectedRoom },
                                 onSave = {
-                                    val minutes = minuteInputs[selectedRoom.id]?.toIntOrNull() ?: selectedRoom.defaultMinutes
+                                    val seconds = minuteInputs[selectedRoom.id]?.toIntOrNull() ?: selectedRoom.defaultSeconds
                                     val name = nameInputs[selectedRoom.id] ?: selectedRoom.name
-                                    onSaveRoom(selectedRoom.id, name, minutes)
+                                    onSaveRoom(selectedRoom.id, name, seconds)
                                     Toast.makeText(context, "${name.trim()} 저장 완료", Toast.LENGTH_SHORT).show()
                                 },
                                 onEnabledChange = { enabled ->
@@ -525,8 +532,8 @@ fun SettingScreen(
                         OutlinedButton(
                             onClick = {
                                 nameInputs[room.id] = preset.name
-                                minuteInputs[room.id] = preset.defaultMinutes.toString()
-                                onSaveRoom(room.id, preset.name, preset.defaultMinutes)
+                                minuteInputs[room.id] = (preset.defaultMinutes * 60).toString()
+                                onSaveRoom(room.id, preset.name, preset.defaultMinutes * 60)
                                 roomForPresetDialog = null
                             },
                             modifier = Modifier.fillMaxWidth()
@@ -1319,6 +1326,7 @@ private fun PresetCard(
 @Composable
 private fun RoomSummaryCard(
     room: RoomInfo,
+    position: Int,
     ordering: Boolean,
     canMoveUp: Boolean,
     canMoveDown: Boolean,
@@ -1327,6 +1335,7 @@ private fun RoomSummaryCard(
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit
 ) {
+    var showMoveMenu by remember(room.id) { mutableStateOf(false) }
     val statusColor = when {
         room.isMaintenance -> Color(0xFF69B8F2)
         room.isEnabled -> Color(0xFF74C98C)
@@ -1334,8 +1343,8 @@ private fun RoomSummaryCard(
     }
     val statusText = when {
         room.isMaintenance -> "유지보수 · 손님 화면에서 숨김"
-        room.isEnabled -> "사용 중 · 기본 ${room.defaultMinutes}분"
-        else -> "사용 안 함 · 기본 ${room.defaultMinutes}분"
+        room.isEnabled -> "사용 중 · 기본 ${formatDefaultTime(room.defaultSeconds)}"
+        else -> "사용 안 함 · 기본 ${formatDefaultTime(room.defaultSeconds)}"
     }
 
     Card(
@@ -1352,14 +1361,60 @@ private fun RoomSummaryCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(room.name, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    if (ordering) "$position   ${room.name}" else room.name,
+                    color = Color.White,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold
+                )
                 Spacer(Modifier.height(3.dp))
                 Text(statusText, color = statusColor, fontSize = 13.sp, maxLines = 1)
             }
             if (ordering) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    OutlinedButton(onClick = onMoveUp, enabled = canMoveUp) { Text("↑ 위") }
-                    OutlinedButton(onClick = onMoveDown, enabled = canMoveDown) { Text("↓ 아래") }
+                Box {
+                    Text(
+                        "⠿",
+                        color = Color(0xFFB8C0C8),
+                        fontSize = 28.sp,
+                        modifier = Modifier
+                            .padding(8.dp)
+                            .pointerInput(room.id, canMoveUp, canMoveDown) {
+                                var drag = 0f
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = { drag = 0f },
+                                    onDrag = { change, amount ->
+                                        change.consume()
+                                        drag += amount.y
+                                        if (drag <= -36f && canMoveUp) {
+                                            onMoveUp()
+                                            drag = 0f
+                                        } else if (drag >= 36f && canMoveDown) {
+                                            onMoveDown()
+                                            drag = 0f
+                                        }
+                                    }
+                                )
+                            }
+                            .clickable { showMoveMenu = true }
+                    )
+                    DropdownMenu(expanded = showMoveMenu, onDismissRequest = { showMoveMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("↑  위로 이동") },
+                            enabled = canMoveUp,
+                            onClick = {
+                                showMoveMenu = false
+                                onMoveUp()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("↓  아래로 이동") },
+                            enabled = canMoveDown,
+                            onClick = {
+                                showMoveMenu = false
+                                onMoveDown()
+                            }
+                        )
+                    }
                 }
             } else {
                 Switch(
@@ -1383,10 +1438,10 @@ private fun RoomSummaryCard(
 private fun RoomSettingCard(
     room: RoomInfo,
     nameValue: String,
-    minutesValue: String,
+    secondsValue: Int,
     hasPresets: Boolean,
     onNameChange: (String) -> Unit,
-    onMinutesChange: (String) -> Unit,
+    onSecondsChange: (Int) -> Unit,
     onChoosePreset: () -> Unit,
     onSave: () -> Unit,
     onEnabledChange: (Boolean) -> Unit,
@@ -1448,14 +1503,8 @@ private fun RoomSettingCard(
             Spacer(Modifier.height(10.dp))
             OutlinedTextField(value = nameValue, onValueChange = onNameChange, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("테마 이름") })
             Spacer(Modifier.height(10.dp))
-            OutlinedTextField(
-                value = minutesValue,
-                onValueChange = onMinutesChange,
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                label = { Text("기본 시간(분)") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-            )
+            Text("기본 시간", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            DefaultTimePicker(totalSeconds = secondsValue, onSecondsChange = onSecondsChange)
             Spacer(Modifier.height(12.dp))
             Button(
                 onClick = onSave,
