@@ -1,5 +1,8 @@
 package com.example.escaperoomtimer.ui.setting
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -54,10 +57,13 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.escaperoomtimer.model.RoomInfo
@@ -136,7 +142,7 @@ fun SettingScreen(
     var webServerStatus by remember { mutableStateOf(ManagerWebServer.statusText()) }
 
     var presetName by remember { mutableStateOf("") }
-    var presetMinutes by remember { mutableStateOf("60") }
+    var presetSeconds by remember { mutableStateOf(60 * 60) }
     var editingPresetId by remember { mutableStateOf<String?>(null) }
     var showPresetEditor by remember { mutableStateOf(false) }
     var reorderPresets by remember { mutableStateOf(false) }
@@ -217,7 +223,7 @@ fun SettingScreen(
     fun clearPresetEditor() {
         editingPresetId = null
         presetName = ""
-        presetMinutes = "60"
+        presetSeconds = 60 * 60
         showPresetEditor = false
     }
     fun movePreset(index: Int, direction: Int) {
@@ -380,14 +386,14 @@ fun SettingScreen(
                     if (showPresetEditor) item {
                         PresetEditorCard(
                             presetName = presetName,
-                            presetMinutes = presetMinutes,
+                            presetSeconds = presetSeconds,
                             isEditing = editingPresetId != null,
                             onNameChange = { presetName = it },
-                            onMinutesChange = { presetMinutes = it.filter(Char::isDigit).take(3) },
+                            onSecondsChange = { presetSeconds = it },
                             onSave = {
                                 val cleanName = presetName.trim()
-                                val minutes = presetMinutes.toIntOrNull()?.coerceIn(1, 240)
-                                if (cleanName.isBlank() || minutes == null) {
+                                val seconds = presetSeconds.coerceIn(1, 240 * 60)
+                                if (cleanName.isBlank()) {
                                     Toast.makeText(context, "테마 이름과 시간을 확인해 주세요.", Toast.LENGTH_SHORT).show()
                                     return@PresetEditorCard
                                 }
@@ -395,8 +401,9 @@ fun SettingScreen(
                                 val preset = ThemePreset(
                                     id = editingPresetId ?: UUID.randomUUID().toString(),
                                     name = cleanName,
-                                    defaultMinutes = minutes,
-                                    emoji = presets.getOrNull(existingIndex)?.emoji ?: "🎭"
+                                    defaultMinutes = (seconds / 60).coerceAtLeast(1),
+                                    emoji = presets.getOrNull(existingIndex)?.emoji ?: "🎭",
+                                    defaultSeconds = seconds
                                 )
                                 if (existingIndex >= 0) presets[existingIndex] = preset else presets.add(preset)
                                 persistPresets()
@@ -417,7 +424,7 @@ fun SettingScreen(
                                 onEdit = {
                                     editingPresetId = preset.id
                                     presetName = preset.name
-                                    presetMinutes = preset.defaultMinutes.toString()
+                                    presetSeconds = preset.defaultSeconds
                                     showPresetEditor = true
                                 },
                                 onDelete = {
@@ -516,7 +523,11 @@ fun SettingScreen(
                     }
                 }
                 SettingPage.SERVER -> item {
-                    ServerConnectionCard(localIp = localIp, webServerStatus = webServerStatus)
+                    ServerConnectionCard(
+                        rooms = rooms,
+                        localIp = localIp,
+                        webServerStatus = webServerStatus
+                    )
                 }
             }
         }
@@ -532,12 +543,12 @@ fun SettingScreen(
                         OutlinedButton(
                             onClick = {
                                 nameInputs[room.id] = preset.name
-                                minuteInputs[room.id] = (preset.defaultMinutes * 60).toString()
-                                onSaveRoom(room.id, preset.name, preset.defaultMinutes * 60)
+                                minuteInputs[room.id] = preset.defaultSeconds.toString()
+                                onSaveRoom(room.id, preset.name, preset.defaultSeconds)
                                 roomForPresetDialog = null
                             },
                             modifier = Modifier.fillMaxWidth()
-                        ) { Text("${preset.name} · ${preset.defaultMinutes}분") }
+                        ) { Text("${preset.name} · ${formatDefaultTime(preset.defaultSeconds)}") }
                     }
                 }
             },
@@ -624,8 +635,8 @@ fun SettingScreen(
                         presets = presets.toList(),
                         alarmSettings = ManagerAlarmPreferences.load(context)
                     )
+                    ManagerBackupManager.createSafetyBackup(context, safetyBackup)
                     if (onRestoreRooms(backup.rooms)) {
-                        ManagerBackupManager.createSafetyBackup(context, safetyBackup)
                         ThemePresetRepository.save(context, backup.presets)
                         presets.clear()
                         presets.addAll(backup.presets)
@@ -1207,9 +1218,21 @@ private fun EmptyPresetCard() {
 }
 
 @Composable
-private fun ServerConnectionCard(localIp: String, webServerStatus: String) {
+private fun ServerConnectionCard(
+    rooms: List<RoomInfo>,
+    localIp: String,
+    webServerStatus: String
+) {
+    val context = LocalContext.current
     val guestCount = ManagerTcpServer.connectedDisplayCounts.values.sum()
     val validIp = localIp != "IP 확인 불가"
+    val tcpAddress = if (validIp) "$localIp:45991" else "주소 확인 불가"
+    val webAddress = if (validIp) "http://$localIp:${ManagerWebServer.PORT}" else "주소 확인 불가"
+    val connectedRooms = rooms.mapNotNull { room ->
+        ManagerTcpServer.connectedDisplayCounts[room.id]
+            ?.takeIf { it > 0 }
+            ?.let { count -> room.name to count }
+    }
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -1221,29 +1244,79 @@ private fun ServerConnectionCard(localIp: String, webServerStatus: String) {
             Text("주소는 확인용이며 이 화면에서는 변경할 수 없습니다.", color = Color(0xFF9AA3AC), fontSize = 13.sp)
             HorizontalDivider(color = Color(0xFF344048))
             ServerInfoRow("Wi-Fi", if (validIp) "연결됨" else "연결 안 됨", if (validIp) Color(0xFF79D892) else Color(0xFFE57373))
-            ServerInfoRow("손님용 TCP", if (validIp) "$localIp:45991" else "주소 확인 불가", Color(0xFF73D5C8))
-            ServerInfoRow("웹 대시보드", if (validIp) "http://$localIp:${ManagerWebServer.PORT}" else "주소 확인 불가", Color(0xFF75B8F3))
+            ServerInfoRow(
+                "손님용 TCP",
+                tcpAddress,
+                Color(0xFF73D5C8),
+                onCopy = if (validIp) {
+                    { copyServerAddress(context, "손님용 TCP", tcpAddress) }
+                } else null
+            )
+            ServerInfoRow(
+                "웹 대시보드",
+                webAddress,
+                Color(0xFF75B8F3),
+                onCopy = if (validIp) {
+                    { copyServerAddress(context, "웹 대시보드", webAddress) }
+                } else null
+            )
             ServerInfoRow("연결 기기", "손님 ${guestCount}대 · 웹 ${ManagerWebServer.connectedWebCount}대", Color.White)
             ServerInfoRow("웹 서버", webServerStatus, if (ManagerWebServer.isRunning) Color(0xFF79D892) else Color(0xFFF0BD55))
+            if (connectedRooms.isNotEmpty()) {
+                HorizontalDivider(color = Color(0xFF344048))
+                Text("테마별 손님 기기", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                connectedRooms.forEach { (roomName, count) ->
+                    ServerInfoRow(roomName, "${count}대", Color(0xFF73D5C8))
+                }
+            }
+            Text("상태는 1초마다 자동으로 갱신됩니다.", color = Color(0xFF8D96A0), fontSize = 11.sp)
         }
     }
 }
 
 @Composable
-private fun ServerInfoRow(label: String, value: String, valueColor: Color) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+private fun ServerInfoRow(
+    label: String,
+    value: String,
+    valueColor: Color,
+    onCopy: (() -> Unit)? = null
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Text(label, color = Color(0xFFAAB2BA), fontSize = 13.sp)
-        Text(value, color = valueColor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(value, color = valueColor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            onCopy?.let {
+                Text(
+                    "⧉",
+                    color = Color(0xFFB8C0C8),
+                    fontSize = 18.sp,
+                    modifier = Modifier
+                        .semantics { contentDescription = "$label 주소 복사" }
+                        .clickable(onClick = it)
+                        .padding(start = 8.dp, top = 4.dp, bottom = 4.dp)
+                )
+            }
+        }
     }
+}
+
+private fun copyServerAddress(context: Context, label: String, value: String) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    clipboard.setPrimaryClip(ClipData.newPlainText(label, value))
+    Toast.makeText(context, "$label 주소를 복사했습니다.", Toast.LENGTH_SHORT).show()
 }
 
 @Composable
 private fun PresetEditorCard(
     presetName: String,
-    presetMinutes: String,
+    presetSeconds: Int,
     isEditing: Boolean,
     onNameChange: (String) -> Unit,
-    onMinutesChange: (String) -> Unit,
+    onSecondsChange: (Int) -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit
 ) {
@@ -1263,13 +1336,11 @@ private fun PresetEditorCard(
                 label = { Text("테마 이름") }
             )
             Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
-                value = presetMinutes,
-                onValueChange = onMinutesChange,
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                label = { Text("기본 시간(분)") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+            Text("기본 시간", color = Color.White, fontWeight = FontWeight.Bold)
+            DefaultTimePicker(
+                totalSeconds = presetSeconds,
+                onSecondsChange = onSecondsChange,
+                modifier = Modifier.fillMaxWidth()
             )
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1308,7 +1379,7 @@ private fun PresetCard(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(preset.name, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                Text("기본 ${preset.defaultMinutes}분", color = Color(0xFF9AA3AC), fontSize = 13.sp)
+                Text("기본 ${formatDefaultTime(preset.defaultSeconds)}", color = Color(0xFF9AA3AC), fontSize = 13.sp)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (ordering) {
@@ -1536,6 +1607,9 @@ private fun WebAdminPinSettingsSection() {
     var currentPin by remember { mutableStateOf("") }
     var newPin by remember { mutableStateOf("") }
     var confirmPin by remember { mutableStateOf("") }
+    var showCurrentPin by remember { mutableStateOf(false) }
+    var showNewPin by remember { mutableStateOf(false) }
+    var showConfirmPin by remember { mutableStateOf(false) }
     var showResetDialog by remember { mutableStateOf(false) }
 
     Card(
@@ -1560,7 +1634,10 @@ private fun WebAdminPinSettingsSection() {
                 label = { Text("현재 PIN") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                visualTransformation = PasswordVisualTransformation(),
+                visualTransformation = if (showCurrentPin) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    PinVisibilityButton(showCurrentPin) { showCurrentPin = !showCurrentPin }
+                },
                 modifier = Modifier.fillMaxWidth()
             )
             OutlinedTextField(
@@ -1569,7 +1646,10 @@ private fun WebAdminPinSettingsSection() {
                 label = { Text("새 PIN (4~8자리)") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                visualTransformation = PasswordVisualTransformation(),
+                visualTransformation = if (showNewPin) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    PinVisibilityButton(showNewPin) { showNewPin = !showNewPin }
+                },
                 modifier = Modifier.fillMaxWidth()
             )
             OutlinedTextField(
@@ -1578,7 +1658,10 @@ private fun WebAdminPinSettingsSection() {
                 label = { Text("새 PIN 확인") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                visualTransformation = PasswordVisualTransformation(),
+                visualTransformation = if (showConfirmPin) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    PinVisibilityButton(showConfirmPin) { showConfirmPin = !showConfirmPin }
+                },
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -1632,6 +1715,31 @@ private fun WebAdminPinSettingsSection() {
             dismissButton = {
                 TextButton(onClick = { showResetDialog = false }) { Text("취소") }
             }
+        )
+    }
+}
+
+@Composable
+private fun PinVisibilityButton(visible: Boolean, onClick: () -> Unit) {
+    Canvas(
+        modifier = Modifier
+            .size(48.dp)
+            .semantics { contentDescription = if (visible) "PIN 숨기기" else "PIN 보기" }
+            .clickable(onClick = onClick)
+            .padding(12.dp)
+    ) {
+        val stroke = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round)
+        drawOval(
+            color = Color(0xFFB8C0C8),
+            topLeft = androidx.compose.ui.geometry.Offset(size.width * .08f, size.height * .25f),
+            size = androidx.compose.ui.geometry.Size(size.width * .84f, size.height * .50f),
+            style = stroke
+        )
+        drawCircle(
+            color = Color(0xFFB8C0C8),
+            radius = size.minDimension * .12f,
+            center = center,
+            style = if (visible) androidx.compose.ui.graphics.drawscope.Fill else stroke
         )
     }
 }

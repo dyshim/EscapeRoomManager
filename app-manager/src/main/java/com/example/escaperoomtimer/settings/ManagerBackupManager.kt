@@ -106,6 +106,7 @@ object ManagerBackupManager {
                     put("id", preset.id)
                     put("name", preset.name)
                     put("defaultMinutes", preset.defaultMinutes)
+                    put("defaultSeconds", preset.defaultSeconds)
                     put("emoji", preset.emoji)
                 })
             }
@@ -160,7 +161,11 @@ object ManagerBackupManager {
                     id = item.optString("id", "preset_$index"),
                     name = name,
                     defaultMinutes = item.optInt("defaultMinutes", 60).coerceIn(1, 240),
-                    emoji = item.optString("emoji", "🎭").ifBlank { "🎭" }
+                    emoji = item.optString("emoji", "🎭").ifBlank { "🎭" },
+                    defaultSeconds = item.optInt(
+                        "defaultSeconds",
+                        item.optInt("defaultMinutes", 60).coerceIn(1, 240) * 60
+                    ).coerceIn(1, 240 * 60)
                 ))
             }
         }

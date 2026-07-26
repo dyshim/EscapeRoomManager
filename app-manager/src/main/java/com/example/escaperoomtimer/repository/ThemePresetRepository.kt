@@ -28,7 +28,11 @@ object ThemePresetRepository {
                             id = item.optString("id", "preset_$index"),
                             name = name,
                             defaultMinutes = item.optInt("defaultMinutes", 60).coerceIn(1, 240),
-                            emoji = item.optString("emoji", "🎭").ifBlank { "🎭" }
+                            emoji = item.optString("emoji", "🎭").ifBlank { "🎭" },
+                            defaultSeconds = item.optInt(
+                                "defaultSeconds",
+                                item.optInt("defaultMinutes", 60).coerceIn(1, 240) * 60
+                            ).coerceIn(1, 240 * 60)
                         )
                     )
                 }
@@ -44,6 +48,7 @@ object ThemePresetRepository {
                     put("id", preset.id)
                     put("name", preset.name.trim())
                     put("defaultMinutes", preset.defaultMinutes.coerceIn(1, 240))
+                    put("defaultSeconds", preset.defaultSeconds.coerceIn(1, 240 * 60))
                     put("emoji", preset.emoji.ifBlank { "🎭" })
                 }
             )
