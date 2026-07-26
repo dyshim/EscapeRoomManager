@@ -114,6 +114,7 @@ object ManagerBackupManager {
             put("soundUri", backup.alarmSettings.soundUri ?: JSONObject.NULL)
             put("autoStopSeconds", backup.alarmSettings.autoStopSeconds)
             put("vibrationEnabled", backup.alarmSettings.vibrationEnabled)
+            put("volumePercent", backup.alarmSettings.volumePercent)
         })
     }
 
@@ -175,7 +176,8 @@ object ManagerBackupManager {
             alarmSettings = ManagerAlarmSettings(
                 soundUri = if (alarm.isNull("soundUri")) null else alarm.optString("soundUri").ifBlank { null },
                 autoStopSeconds = alarm.optInt("autoStopSeconds", 30).coerceIn(0, 600),
-                vibrationEnabled = alarm.optBoolean("vibrationEnabled", true)
+                vibrationEnabled = alarm.optBoolean("vibrationEnabled", true),
+                volumePercent = alarm.optInt("volumePercent", 100).coerceIn(0, 100)
             )
         )
     }

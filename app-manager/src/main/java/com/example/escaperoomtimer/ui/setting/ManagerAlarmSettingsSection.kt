@@ -14,14 +14,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,7 +45,7 @@ private val stopOptions = listOf(5, 10, 15, 20, 30, 45, 60, 0)
 fun ManagerAlarmSettingsSection() {
     val context = LocalContext.current
     var settings by remember { mutableStateOf(ManagerAlarmPreferences.load(context)) }
-    var showStopDialog by remember { mutableStateOf(false) }
+    var showStopMenu by remember { mutableStateOf(false) }
 
     fun save(updated: ManagerAlarmSettings) {
         settings = updated
@@ -109,7 +110,11 @@ fun ManagerAlarmSettingsSection() {
                 }
                 Button(
                     onClick = {
-                        ManagerGameEndAlarmController.preview(context, settings.soundUri)
+                        ManagerGameEndAlarmController.preview(
+                            context,
+                            settings.soundUri,
+                            settings.volumePercent
+                        )
                     },
                     modifier = Modifier.weight(1f)
                 ) {
@@ -124,6 +129,25 @@ fun ManagerAlarmSettingsSection() {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
+                Text("알람 음량", color = Color.White, fontWeight = FontWeight.Bold)
+                Text("${settings.volumePercent}%", color = Color(0xFFFFB000), fontSize = 14.sp)
+            }
+            Slider(
+                value = settings.volumePercent.toFloat(),
+                onValueChange = { value ->
+                    settings = settings.copy(volumePercent = value.toInt().coerceIn(0, 100))
+                },
+                onValueChangeFinished = { ManagerAlarmPreferences.save(context, settings) },
+                valueRange = 0f..100f
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
                 Column {
                     Text("자동 정지", color = Color.White, fontWeight = FontWeight.Bold)
                     Text(
@@ -132,8 +156,24 @@ fun ManagerAlarmSettingsSection() {
                         fontSize = 13.sp
                     )
                 }
-                OutlinedButton(onClick = { showStopDialog = true }) {
-                    Text("변경")
+                Column(horizontalAlignment = Alignment.End) {
+                    OutlinedButton(onClick = { showStopMenu = true }) {
+                        Text(autoStopLabel(settings.autoStopSeconds))
+                    }
+                    DropdownMenu(
+                        expanded = showStopMenu,
+                        onDismissRequest = { showStopMenu = false }
+                    ) {
+                        stopOptions.forEach { seconds ->
+                            DropdownMenuItem(
+                                text = { Text(autoStopLabel(seconds)) },
+                                onClick = {
+                                    save(settings.copy(autoStopSeconds = seconds))
+                                    showStopMenu = false
+                                }
+                            )
+                        }
+                    }
                 }
             }
 
@@ -160,30 +200,6 @@ fun ManagerAlarmSettingsSection() {
         }
     }
 
-    if (showStopDialog) {
-        AlertDialog(
-            onDismissRequest = { showStopDialog = false },
-            title = { Text("자동 정지 시간") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    stopOptions.forEach { seconds ->
-                        TextButton(
-                            onClick = {
-                                save(settings.copy(autoStopSeconds = seconds))
-                                showStopDialog = false
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(autoStopLabel(seconds))
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showStopDialog = false }) { Text("닫기") }
-            }
-        )
-    }
 }
 
 @Composable

@@ -32,17 +32,19 @@ object ManagerGameEndAlarmController {
             soundUri = resolveSoundUri(settings.soundUri),
             vibrationEnabled = settings.vibrationEnabled,
             autoStopMillis = settings.autoStopSeconds.takeIf { it > 0 }?.times(1_000L),
+            volume = settings.volumePercent.coerceIn(0, 100) / 100f,
             markActive = true
         )
     }
 
     @Synchronized
-    fun preview(context: Context, soundUri: String?) {
+    fun preview(context: Context, soundUri: String?, volumePercent: Int = 100) {
         playInternal(
             context = context,
             soundUri = resolveSoundUri(soundUri),
             vibrationEnabled = false,
             autoStopMillis = 3_000L,
+            volume = volumePercent.coerceIn(0, 100) / 100f,
             markActive = false
         )
     }
@@ -52,6 +54,7 @@ object ManagerGameEndAlarmController {
         soundUri: Uri,
         vibrationEnabled: Boolean,
         autoStopMillis: Long?,
+        volume: Float,
         markActive: Boolean
     ) {
         stop()
@@ -67,6 +70,7 @@ object ManagerGameEndAlarmController {
                 )
                 setDataSource(appContext, soundUri)
                 isLooping = true
+                setVolume(volume, volume)
                 prepare()
                 start()
             }
@@ -82,6 +86,7 @@ object ManagerGameEndAlarmController {
                     )
                     setDataSource(appContext, fallback)
                     isLooping = true
+                    setVolume(volume, volume)
                     prepare()
                     start()
                 }
