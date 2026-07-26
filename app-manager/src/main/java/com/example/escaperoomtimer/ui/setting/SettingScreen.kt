@@ -157,6 +157,7 @@ fun SettingScreen(
         branchName.trim() != savedStoreInfo.branchName
     val alarmSettings = ManagerAlarmPreferences.load(context)
     val alarmEnabled = alarmSettings.enabled
+    val webPinUsesDefault = WebAdminPinPreferences.isDefaultPin(context)
     val serverMenuStatus = when {
         localIp == "IP 확인 불가" -> "연결 안 됨"
         ManagerTcpServer.isRunning && ManagerWebServer.isRunning -> "정상"
@@ -289,6 +290,7 @@ fun SettingScreen(
                         SettingsMenu(
                             storeInfoConfigured = savedStoreInfo.storeName.isNotBlank(),
                             alarmEnabled = alarmEnabled,
+                            webPinUsesDefault = webPinUsesDefault,
                             serverStatus = serverMenuStatus,
                             presetCount = presets.size,
                             roomCount = rooms.size,
@@ -741,6 +743,7 @@ private fun SettingTopBar(page: SettingPage, onBack: () -> Unit) {
 private fun SettingsMenu(
     storeInfoConfigured: Boolean,
     alarmEnabled: Boolean,
+    webPinUsesDefault: Boolean,
     serverStatus: String,
     presetCount: Int,
     roomCount: Int,
@@ -769,7 +772,8 @@ private fun SettingsMenu(
             description = "PC 웹 로그인 PIN을 변경합니다.",
             color = Color(0xFF75B8F3),
             icon = SettingIcon.SHIELD,
-            badge = "설정됨",
+            badge = if (webPinUsesDefault) "변경 권장" else "설정됨",
+            badgeColor = if (webPinUsesDefault) Color(0xFFF0BD55) else Color(0xFF75B8F3),
             onClick = { onPageSelected(SettingPage.WEB_PIN) }
         )
         SettingMenuCard(
@@ -821,6 +825,7 @@ private fun SettingMenuCard(
     color: Color,
     icon: SettingIcon,
     badge: String? = null,
+    badgeColor: Color = color,
     onClick: () -> Unit
 ) {
     Card(
@@ -850,11 +855,11 @@ private fun SettingMenuCard(
             badge?.let {
                 Text(
                     text = it,
-                    color = color,
+                    color = badgeColor,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier
-                        .background(color.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+                        .background(badgeColor.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
                         .padding(horizontal = 7.dp, vertical = 4.dp)
                 )
             }
@@ -1728,6 +1733,10 @@ private fun WebAdminPinSettingsSection() {
     var showNewPin by remember { mutableStateOf(false) }
     var showConfirmPin by remember { mutableStateOf(false) }
     var showResetDialog by remember { mutableStateOf(false) }
+    var usingDefaultPin by remember { mutableStateOf(WebAdminPinPreferences.isDefaultPin(context)) }
+    val canChangePin = WebAdminPinPreferences.isValidPin(currentPin) &&
+        WebAdminPinPreferences.isValidPin(newPin) &&
+        newPin == confirmPin
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1744,6 +1753,19 @@ private fun WebAdminPinSettingsSection() {
                 color = Color(0xFFB8C0C8),
                 fontSize = 13.sp
             )
+
+            if (usingDefaultPin) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF2B2415)),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text("기본 PIN 1234를 사용 중입니다.", color = Color(0xFFF0BD55), fontWeight = FontWeight.Bold)
+                        Text("보안을 위해 새 PIN으로 변경해 주세요.", color = Color(0xFFC8C0AE), fontSize = 12.sp)
+                    }
+                }
+            }
 
             OutlinedTextField(
                 value = currentPin,
@@ -1794,6 +1816,7 @@ private fun WebAdminPinSettingsSection() {
                             newPin != confirmPin ->
                                 Toast.makeText(context, "새 PIN 확인이 일치하지 않습니다.", Toast.LENGTH_SHORT).show()
                             WebAdminPinPreferences.changePin(context, currentPin, newPin) -> {
+                                usingDefaultPin = newPin == "1234"
                                 currentPin = ""
                                 newPin = ""
                                 confirmPin = ""
@@ -1803,7 +1826,8 @@ private fun WebAdminPinSettingsSection() {
                         }
                     },
                     modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                    enabled = canChangePin
                 ) { Text("PIN 변경") }
 
                 OutlinedButton(
@@ -1822,6 +1846,7 @@ private fun WebAdminPinSettingsSection() {
             confirmButton = {
                 TextButton(onClick = {
                     WebAdminPinPreferences.resetToDefault(context)
+                    usingDefaultPin = true
                     currentPin = ""
                     newPin = ""
                     confirmPin = ""

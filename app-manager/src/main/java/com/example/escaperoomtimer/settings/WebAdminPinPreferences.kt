@@ -36,6 +36,8 @@ object WebAdminPinPreferences {
         saveNewPin(context, DEFAULT_PIN)
     }
 
+    fun isDefaultPin(context: Context): Boolean = verify(context, DEFAULT_PIN)
+
     fun isValidPin(pin: String): Boolean = pin.length in 4..8 && pin.all(Char::isDigit)
 
     private fun saveNewPin(context: Context, pin: String) {
