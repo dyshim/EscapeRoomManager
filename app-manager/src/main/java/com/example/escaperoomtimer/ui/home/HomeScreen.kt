@@ -83,7 +83,8 @@ fun HomeScreen(
     var resetRoom by remember { mutableStateOf<RoomInfo?>(null) }
     var showAppInfo by remember { mutableStateOf(false) }
     val storeDisplayName = remember(context) {
-        StoreInfoPreferences.load(context).displayName.ifBlank { "매장명 미설정" }
+        StoreInfoPreferences.load(context).displayName
+            .takeUnless { it.isBlank() || it == "매장명 미설정" }
     }
 
     LaunchedEffect(Unit) {
@@ -228,7 +229,7 @@ private fun DashboardHeader(
     date: String,
     time: String,
     connected: Boolean,
-    storeName: String,
+    storeName: String?,
     onMenuClick: () -> Unit
 ) {
     Column(
@@ -237,7 +238,10 @@ private fun DashboardHeader(
             .background(Color.Black)
             .padding(start = 8.dp, top = 8.dp, end = 16.dp, bottom = 10.dp)
     ) {
-        Row(modifier = Modifier.fillMaxWidth().height(52.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.fillMaxWidth().height(if (storeName == null) 44.dp else 52.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             IconButton(
                 onClick = onMenuClick,
                 modifier = Modifier.size(48.dp).semantics { contentDescription = "메뉴 열기" }
@@ -250,13 +254,15 @@ private fun DashboardHeader(
                     fontWeight = FontWeight.Bold,
                     maxLines = 1
                 )
-                Text(
-                    storeName,
-                    color = AppTextSecondary,
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                if (storeName != null) {
+                    Text(
+                        storeName,
+                        color = AppTextSecondary,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
         Row(
