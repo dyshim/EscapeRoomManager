@@ -164,7 +164,6 @@ fun HomeScreen(
                 }
                 item(key = "server-status", span = { GridItemSpan(maxLineSpan) }) {
                     ServerInfoCard(status = serverStatus, onClick = onServerClick)
-                    Spacer(Modifier.height(8.dp))
                 }
                 if (rooms.isEmpty()) {
                     item(key = "empty-rooms", span = { GridItemSpan(maxLineSpan) }) {
@@ -335,25 +334,20 @@ private enum class ServerStatus(val label: String, val color: Color) {
 
 @Composable
 private fun ServerInfoCard(status: ServerStatus, onClick: () -> Unit) {
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
+            .height(60.dp)
             .border(1.dp, DashboardBorder, RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp)
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("서버 상태", color = AppText, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.weight(1f))
-            Canvas(modifier = Modifier.size(8.dp)) { drawCircle(status.color) }
-            Text(status.label, color = AppText, fontSize = 13.sp, modifier = Modifier.padding(start = 6.dp))
-            Text("›", color = AppText, fontSize = 25.sp, modifier = Modifier.padding(start = 12.dp))
-        }
-        Row(modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
-            Text("마지막 동기화", color = AppTextSecondary, fontSize = 12.sp)
-            Spacer(Modifier.weight(1f))
-            Text("기록 없음", color = AppTextSecondary, fontSize = 12.sp)
-        }
+        Text("서버 상태", color = AppText, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.weight(1f))
+        Canvas(modifier = Modifier.size(8.dp)) { drawCircle(status.color) }
+        Text(status.label, color = AppText, fontSize = 13.sp, modifier = Modifier.padding(start = 6.dp))
+        Text("›", color = AppText, fontSize = 25.sp, modifier = Modifier.padding(start = 12.dp))
     }
 }
 
