@@ -38,14 +38,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.escaperoomtimer.model.RoomInfo
 import com.example.escaperoomtimer.model.RoomStatus
 import com.example.escaperoomtimer.network.ManagerTcpServer
+import com.example.escaperoomtimer.settings.StoreInfoPreferences
 import com.example.escaperoomtimer.ui.common.ManagerStatusColors
 import com.example.escaperoomtimer.ui.theme.AppText
 import com.example.escaperoomtimer.ui.theme.AppTextSecondary
@@ -72,12 +75,16 @@ fun HomeScreen(
     onServerClick: () -> Unit,
     onAddRoom: (name: String, defaultMinutes: Int) -> String
 ) {
+    val context = LocalContext.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var currentDateTime by remember { mutableStateOf(Date()) }
     var localIp by remember { mutableStateOf(localIpv4Address()) }
     var resetRoom by remember { mutableStateOf<RoomInfo?>(null) }
     var showAppInfo by remember { mutableStateOf(false) }
+    val storeDisplayName = remember(context) {
+        StoreInfoPreferences.load(context).displayName.ifBlank { "매장명 미설정" }
+    }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -139,6 +146,7 @@ fun HomeScreen(
                 date = formatDashboardDate(currentDateTime),
                 time = formatDashboardTime(currentDateTime),
                 connected = connected,
+                storeName = storeDisplayName,
                 onMenuClick = { scope.launch { drawerState.open() } }
             )
             LazyColumn(
@@ -216,25 +224,40 @@ fun HomeScreen(
 }
 
 @Composable
-private fun DashboardHeader(date: String, time: String, connected: Boolean, onMenuClick: () -> Unit) {
+private fun DashboardHeader(
+    date: String,
+    time: String,
+    connected: Boolean,
+    storeName: String,
+    onMenuClick: () -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(Color.Black)
             .padding(start = 8.dp, top = 8.dp, end = 16.dp, bottom = 10.dp)
     ) {
-        Row(modifier = Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(modifier = Modifier.fillMaxWidth().height(52.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(
                 onClick = onMenuClick,
                 modifier = Modifier.size(48.dp).semantics { contentDescription = "메뉴 열기" }
             ) { Text("☰", color = AppText, fontSize = 28.sp) }
-            Text(
-                "EscapeRoom Suite",
-                color = AppText,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(start = 8.dp)
-            )
+            Column(modifier = Modifier.padding(start = 8.dp).weight(1f)) {
+                Text(
+                    "운영 대시보드",
+                    color = AppText,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
+                )
+                Text(
+                    storeName,
+                    color = AppTextSecondary,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
         Row(
             modifier = Modifier.fillMaxWidth().padding(start = 56.dp),
