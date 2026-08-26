@@ -2,7 +2,6 @@ package com.example.escaperoomtimer.ui.home
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,12 +9,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -51,29 +50,30 @@ private enum class DashboardRoomState(val label: String) {
 }
 
 @Composable
-fun RoomCard(room: RoomInfo, onClick: () -> Unit, onActionClick: () -> Unit) {
+fun RoomCard(
+    room: RoomInfo,
+    onTimerClick: () -> Unit,
+    onResetClick: () -> Unit,
+    onActionClick: () -> Unit
+) {
     val state = room.dashboardState()
     val stateColor = state.color()
     val cardColor = if (state == DashboardRoomState.RUNNING) Color(0xFF1A1E21) else Color(0xFF111416)
 
     Surface(
-        modifier = Modifier.fillMaxWidth().height(88.dp).clickable(onClick = onClick),
+        modifier = Modifier.fillMaxWidth().height(160.dp),
         shape = RoundedCornerShape(16.dp),
         color = cardColor,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row {
             Box(modifier = Modifier.width(4.dp).fillMaxHeight().background(stateColor))
-            RoomActionButton(
-                state = state,
-                color = stateColor,
-                enabled = !room.isMaintenance,
-                onClick = onActionClick,
-                modifier = Modifier.padding(start = 10.dp)
-            )
-            Column(modifier = Modifier.weight(1f).padding(start = 10.dp, end = 8.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(36.dp).padding(start = 10.dp, end = 8.dp, top = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
                         text = room.name,
                         color = AppText,
@@ -81,7 +81,7 @@ fun RoomCard(room: RoomInfo, onClick: () -> Unit, onActionClick: () -> Unit) {
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
+                        modifier = Modifier.weight(1f)
                     )
                     Text(
                         text = state.label,
@@ -94,83 +94,129 @@ fun RoomCard(room: RoomInfo, onClick: () -> Unit, onActionClick: () -> Unit) {
                             .padding(horizontal = 5.dp, vertical = 4.dp)
                     )
                 }
-                Text(
-                    text = room.expectedEndDescription(),
-                    color = AppTextSecondary,
-                    fontSize = 13.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .clickable(onClick = onTimerClick)
+                        .heightIn(min = 48.dp)
+                        .semantics { contentDescription = "${room.name} 상세 화면" },
+                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = formatTime(room.seconds),
+                        color = AppText,
+                        fontSize = 30.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        style = TextStyle(fontFeatureSettings = "tnum")
+                    )
+                    Text(
+                        text = room.expectedEndDescription(),
+                        color = AppTextSecondary,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+                HorizontalDivider(color = Color(0xFF30363B))
+                Row(modifier = Modifier.fillMaxWidth().height(52.dp)) {
+                    RoomControl(
+                        label = "초기화",
+                        type = RoomControlType.RESET,
+                        color = ManagerStatusColors.Finished,
+                        enabled = true,
+                        onClick = onResetClick,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(Color(0xFF30363B)))
+                    RoomControl(
+                        label = state.actionLabel(),
+                        type = state.controlType(),
+                        color = stateColor,
+                        enabled = state != DashboardRoomState.FINISHED && !room.isMaintenance,
+                        onClick = onActionClick,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
-            Text(
-                text = formatTime(room.seconds),
-                color = AppText,
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                style = TextStyle(fontFeatureSettings = "tnum"),
-                modifier = Modifier.padding(end = 4.dp)
-            )
-            Text(
-                "›",
-                color = AppText,
-                fontSize = 28.sp,
-                modifier = Modifier.clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 20.dp)
-            )
         }
     }
 }
 
+private enum class RoomControlType { RESET, PLAY, PAUSE, DISABLED }
+
 @Composable
-private fun RoomActionButton(
-    state: DashboardRoomState,
+private fun RoomControl(
+    label: String,
+    type: RoomControlType,
     color: Color,
     enabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val actionLabel = when (state) {
-        DashboardRoomState.WAITING -> "시작"
-        DashboardRoomState.RUNNING -> "일시정지"
-        DashboardRoomState.PAUSED -> "재개"
-        DashboardRoomState.FINISHED -> "초기화"
-    }
-    IconButton(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = modifier.size(48.dp).border(1.5.dp, if (enabled) color else Color.Gray, CircleShape)
+    val contentColor = if (enabled) color else Color(0xFF737A80)
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
+            .clickable(enabled = enabled, onClick = onClick)
+            .semantics { contentDescription = label },
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Canvas(modifier = Modifier.size(22.dp).semantics { contentDescription = actionLabel }) {
-            val iconColor = if (enabled) color else Color.Gray
-            val stroke = Stroke(width = 2.2.dp.toPx(), cap = StrokeCap.Round)
-            when (state) {
-                DashboardRoomState.WAITING,
-                DashboardRoomState.PAUSED -> {
+        Canvas(modifier = Modifier.size(18.dp)) {
+            val stroke = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
+            when (type) {
+                RoomControlType.RESET -> {
+                    drawArc(contentColor, 35f, 285f, false, style = stroke)
+                    val arrow = Path().apply {
+                        moveTo(size.width * .18f, size.height * .20f)
+                        lineTo(size.width * .18f, size.height * .48f)
+                        lineTo(size.width * .42f, size.height * .32f)
+                    }
+                    drawPath(arrow, contentColor, style = stroke)
+                }
+                RoomControlType.PLAY -> {
                     val play = Path().apply {
                         moveTo(size.width * .30f, size.height * .18f)
                         lineTo(size.width * .78f, size.height * .50f)
                         lineTo(size.width * .30f, size.height * .82f)
                         close()
                     }
-                    drawPath(play, iconColor, style = stroke)
+                    drawPath(play, contentColor, style = stroke)
                 }
-                DashboardRoomState.RUNNING -> {
-                    drawLine(iconColor, Offset(size.width * .35f, size.height * .20f), Offset(size.width * .35f, size.height * .80f), stroke.width, StrokeCap.Round)
-                    drawLine(iconColor, Offset(size.width * .65f, size.height * .20f), Offset(size.width * .65f, size.height * .80f), stroke.width, StrokeCap.Round)
+                RoomControlType.PAUSE -> {
+                    drawLine(contentColor, Offset(size.width * .35f, size.height * .20f), Offset(size.width * .35f, size.height * .80f), stroke.width, StrokeCap.Round)
+                    drawLine(contentColor, Offset(size.width * .65f, size.height * .20f), Offset(size.width * .65f, size.height * .80f), stroke.width, StrokeCap.Round)
                 }
-                DashboardRoomState.FINISHED -> {
-                    drawArc(iconColor, 35f, 285f, false, style = stroke)
-                    val arrow = Path().apply {
-                        moveTo(size.width * .18f, size.height * .20f)
-                        lineTo(size.width * .18f, size.height * .48f)
-                        lineTo(size.width * .42f, size.height * .32f)
-                    }
-                    drawPath(arrow, iconColor, style = stroke)
-                }
+                RoomControlType.DISABLED -> drawCircle(contentColor, style = stroke)
             }
         }
+        Text(
+            text = label,
+            color = contentColor,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            modifier = Modifier.padding(top = 2.dp)
+        )
     }
+}
+
+private fun DashboardRoomState.actionLabel(): String = when (this) {
+    DashboardRoomState.WAITING -> "시작"
+    DashboardRoomState.RUNNING -> "일시정지"
+    DashboardRoomState.PAUSED -> "재개"
+    DashboardRoomState.FINISHED -> "비활성"
+}
+
+private fun DashboardRoomState.controlType(): RoomControlType = when (this) {
+    DashboardRoomState.WAITING,
+    DashboardRoomState.PAUSED -> RoomControlType.PLAY
+    DashboardRoomState.RUNNING -> RoomControlType.PAUSE
+    DashboardRoomState.FINISHED -> RoomControlType.DISABLED
 }
 
 private fun RoomInfo.dashboardState(): DashboardRoomState = when {

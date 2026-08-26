@@ -15,8 +15,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DrawerValue
@@ -150,18 +152,22 @@ fun HomeScreen(
                 storeName = storeDisplayName,
                 onMenuClick = { scope.launch { drawerState.open() } }
             )
-            LazyColumn(
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 20.dp),
+                contentPadding = PaddingValues(start = 12.dp, top = 16.dp, end = 12.dp, bottom = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                item(key = "theme-summary") { ThemeSummary(rooms = rooms) }
-                item(key = "server-status") {
+                item(key = "theme-summary", span = { GridItemSpan(maxLineSpan) }) {
+                    ThemeSummary(rooms = rooms)
+                }
+                item(key = "server-status", span = { GridItemSpan(maxLineSpan) }) {
                     ServerInfoCard(status = serverStatus, onClick = onServerClick)
                     Spacer(Modifier.height(8.dp))
                 }
                 if (rooms.isEmpty()) {
-                    item(key = "empty-rooms") {
+                    item(key = "empty-rooms", span = { GridItemSpan(maxLineSpan) }) {
                         Column(
                             modifier = Modifier.fillMaxWidth().height(120.dp),
                             verticalArrangement = Arrangement.Center,
@@ -179,18 +185,19 @@ fun HomeScreen(
                     items(rooms, key = { it.id }) { room ->
                         RoomCard(
                             room = room,
-                            onClick = { onRoomClick(room) },
+                            onTimerClick = { onRoomClick(room) },
+                            onResetClick = { resetRoom = room },
                             onActionClick = {
-                                if (room.status == RoomStatus.FINISHED || room.seconds <= 0) {
-                                    resetRoom = room
-                                } else {
+                                if (room.status != RoomStatus.FINISHED && room.seconds > 0) {
                                     onRoomAction(room)
                                 }
                             }
                         )
                     }
                 }
-                item(key = "navigation-inset") { Spacer(Modifier.navigationBarsPadding()) }
+                item(key = "navigation-inset", span = { GridItemSpan(maxLineSpan) }) {
+                    Spacer(Modifier.navigationBarsPadding())
+                }
             }
         }
     }
