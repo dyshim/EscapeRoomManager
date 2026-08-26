@@ -82,7 +82,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class ScreenMode { HOME, SETTING, STAFF_TIMER }
+private enum class ScreenMode { HOME, SETTING, SERVER_SETTING, STAFF_TIMER }
 
 @Composable
 fun EscapeRoomManagerApp(onExitApp: () -> Unit) {
@@ -96,11 +96,15 @@ fun EscapeRoomManagerApp(onExitApp: () -> Unit) {
                 selectedRoomId = room.id
                 screenMode = ScreenMode.STAFF_TIMER
             },
+            onRoomAction = { room -> TimerManager.startOrPause(room.id) },
+            onRoomReset = { room -> TimerManager.reset(room.id) },
             onSettingsClick = { screenMode = ScreenMode.SETTING },
+            onServerClick = { screenMode = ScreenMode.SERVER_SETTING },
             onAddRoom = { name, minutes -> TimerManager.addRoom(name, minutes) }
         )
 
-        ScreenMode.SETTING -> SettingScreen(
+        ScreenMode.SETTING,
+        ScreenMode.SERVER_SETTING -> SettingScreen(
             rooms = TimerManager.rooms,
             onBack = { screenMode = ScreenMode.HOME },
             onSaveRoom = TimerManager::updateRoomSetting,
@@ -110,7 +114,8 @@ fun EscapeRoomManagerApp(onExitApp: () -> Unit) {
             onMoveRoom = TimerManager::moveRoom,
             onAddRoom = TimerManager::addRoom,
             onRestoreRooms = TimerManager::restoreConfiguration,
-            onExitApp = onExitApp
+            onExitApp = onExitApp,
+            openServerPage = screenMode == ScreenMode.SERVER_SETTING
         )
 
         ScreenMode.STAFF_TIMER -> {

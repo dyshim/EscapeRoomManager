@@ -117,7 +117,8 @@ fun SettingScreen(
     onMoveRoom: (roomId: String, direction: Int) -> Boolean,
     onAddRoom: (name: String, defaultMinutes: Int) -> String,
     onRestoreRooms: (List<RoomInfo>) -> Boolean,
-    onExitApp: () -> Unit
+    onExitApp: () -> Unit,
+    openServerPage: Boolean = false
 ) {
     val context = LocalContext.current
     val nameInputs = remember { mutableStateMapOf<String, String>() }
@@ -125,7 +126,9 @@ fun SettingScreen(
     val presets = remember {
         mutableStateListOf<ThemePreset>().apply { addAll(ThemePresetRepository.load(context)) }
     }
-    var currentPage by remember { mutableStateOf(SettingPage.MENU) }
+    var currentPage by remember(openServerPage) {
+        mutableStateOf(if (openServerPage) SettingPage.SERVER else SettingPage.MENU)
+    }
     var savedStoreInfo by remember { mutableStateOf(StoreInfoPreferences.load(context)) }
     var storeName by remember { mutableStateOf(savedStoreInfo.storeName) }
     var branchName by remember { mutableStateOf(savedStoreInfo.branchName) }
