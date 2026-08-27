@@ -663,7 +663,7 @@ fun StatusBadge(status: RoomStatus, isRunning: Boolean, isMaintenance: Boolean =
 
     Box(
         modifier = Modifier
-            .background(color.copy(alpha = 0.18f), RoundedCornerShape(999.dp))
+            .background(color.copy(alpha = 0.16f), RoundedCornerShape(999.dp))
             .padding(horizontal = 8.dp, vertical = 4.dp)
     ) {
         Text(label, color = color, fontSize = 10.sp, fontWeight = FontWeight.Bold)
