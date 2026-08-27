@@ -310,7 +310,7 @@ fun TimerScreen(
                     OutlinedButton(
                         onClick = { adjustmentIndex = (adjustmentIndex - 1).coerceAtLeast(0) },
                         modifier = Modifier.weight(1f).height(54.dp),
-                        enabled = adjustmentIndex > 0
+                        enabled = !room.isMaintenance && adjustmentIndex > 0
                     ) { Text("−", fontSize = 26.sp) }
                     Text(
                         text = adjustmentLabel(adjustmentOptions[adjustmentIndex]),
@@ -323,7 +323,7 @@ fun TimerScreen(
                     OutlinedButton(
                         onClick = { adjustmentIndex = (adjustmentIndex + 1).coerceAtMost(adjustmentOptions.lastIndex) },
                         modifier = Modifier.weight(1f).height(54.dp),
-                        enabled = adjustmentIndex < adjustmentOptions.lastIndex
+                        enabled = !room.isMaintenance && adjustmentIndex < adjustmentOptions.lastIndex
                     ) { Text("+", fontSize = 26.sp) }
                 }
                 Spacer(Modifier.height(10.dp))
@@ -332,12 +332,14 @@ fun TimerScreen(
                         text = "시간 추가",
                         color = Color(0xFF16C967),
                         modifier = Modifier.weight(1f),
+                        enabled = !room.isMaintenance,
                         onClick = { adjustTime(adjustmentOptions[adjustmentIndex]) }
                     )
                     TimerButton(
                         text = "시간 차감",
                         color = Color(0xFFFF414D),
                         modifier = Modifier.weight(1f),
+                        enabled = !room.isMaintenance,
                         onClick = { adjustTime(-adjustmentOptions[adjustmentIndex]) }
                     )
                 }
@@ -347,6 +349,7 @@ fun TimerScreen(
                         OutlinedButton(
                             onClick = { adjustmentIndex = index },
                             modifier = Modifier.weight(1f),
+                            enabled = !room.isMaintenance,
                             colors = if (adjustmentIndex == index) {
                                 ButtonDefaults.outlinedButtonColors(containerColor = Color(0xFF164D25))
                             } else {
@@ -393,7 +396,8 @@ fun TimerScreen(
                         modifier = Modifier.weight(1f),
                         label = "분",
                         maxValue = 999,
-                        maxDigits = 3
+                        maxDigits = 3,
+                        enabled = !room.isMaintenance
                     )
                     Text(":", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
                     TimeWheelInput(
@@ -402,7 +406,8 @@ fun TimerScreen(
                         modifier = Modifier.weight(1f),
                         label = "초",
                         maxValue = 59,
-                        maxDigits = 2
+                        maxDigits = 2,
+                        enabled = !room.isMaintenance
                     )
                 }
                 Text(
@@ -415,6 +420,7 @@ fun TimerScreen(
                     text = "입력 시간 적용",
                     color = Color(0xFF7134C8),
                     modifier = Modifier.fillMaxWidth(),
+                    enabled = !room.isMaintenance,
                     onClick = {
                         val minutes = minuteInput.toIntOrNull()?.coerceIn(0, 999) ?: 0
                         val seconds = secondInput.toIntOrNull()?.coerceIn(0, 59) ?: 0
@@ -675,15 +681,22 @@ fun TimerButton(
     text: String,
     color: Color,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     onClick: () -> Unit
 ) {
     Button(
         onClick = onClick,
+        enabled = enabled,
         modifier = modifier.height(50.dp),
         shape = RoundedCornerShape(12.dp),
         colors = ButtonDefaults.buttonColors(containerColor = color)
     ) {
-        Text(text, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text(
+            text,
+            color = if (enabled) Color.White else Color.White.copy(alpha = 0.38f),
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
 

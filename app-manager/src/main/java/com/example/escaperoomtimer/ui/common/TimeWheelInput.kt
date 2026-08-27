@@ -34,9 +34,13 @@ fun TimeWheelInput(
     label: String,
     maxValue: Int,
     maxDigits: Int,
-    accentColor: Color = Color(0xFF7134C8)
+    accentColor: Color = Color(0xFF7134C8),
+    enabled: Boolean = true
 ) {
     var dragDistance by remember { mutableFloatStateOf(0f) }
+    val activeAccentColor = if (enabled) accentColor else accentColor.copy(alpha = 0.38f)
+    val primaryTextColor = if (enabled) Color.White else Color.White.copy(alpha = 0.38f)
+    val secondaryTextColor = Color(0xFF687078).copy(alpha = if (enabled) 1f else 0.38f)
 
     fun changeBy(delta: Int) {
         val current = value.toIntOrNull() ?: 0
@@ -44,36 +48,43 @@ fun TimeWheelInput(
     }
 
     Column(
-        modifier = modifier.pointerInput(value, maxValue) {
-            detectVerticalDragGestures(
-                onVerticalDrag = { change, amount ->
-                    change.consume()
-                    dragDistance += amount
-                    if (abs(dragDistance) >= 24f) {
-                        changeBy(if (dragDistance < 0f) 1 else -1)
-                        dragDistance = 0f
-                    }
-                },
-                onDragEnd = { dragDistance = 0f },
-                onDragCancel = { dragDistance = 0f }
-            )
-        },
+        modifier = modifier.then(
+            if (enabled) {
+                Modifier.pointerInput(value, maxValue) {
+                    detectVerticalDragGestures(
+                        onVerticalDrag = { change, amount ->
+                            change.consume()
+                            dragDistance += amount
+                            if (abs(dragDistance) >= 24f) {
+                                changeBy(if (dragDistance < 0f) 1 else -1)
+                                dragDistance = 0f
+                            }
+                        },
+                        onDragEnd = { dragDistance = 0f },
+                        onDragCancel = { dragDistance = 0f }
+                    )
+                }
+            } else {
+                Modifier
+            }
+        ),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(label, color = Color(0xFFD7DEE4), fontSize = 12.sp)
+        Text(label, color = Color(0xFFD7DEE4).copy(alpha = if (enabled) 1f else 0.38f), fontSize = 12.sp)
         Text(
             "⌃",
-            color = accentColor,
+            color = activeAccentColor,
             fontSize = 22.sp,
-            modifier = Modifier.clickable { changeBy(1) }.padding(horizontal = 30.dp, vertical = 3.dp)
+            modifier = Modifier.clickable(enabled = enabled) { changeBy(1) }.padding(horizontal = 30.dp, vertical = 3.dp)
         )
         Text(
             text = ((value.toIntOrNull() ?: 0) - 1).coerceAtLeast(0).toString(),
-            color = Color(0xFF687078),
+            color = secondaryTextColor,
             fontSize = 17.sp
         )
         BasicTextField(
             value = value,
+            enabled = enabled,
             onValueChange = { input ->
                 val digits = input.filter(Char::isDigit).takeLast(maxDigits)
                 if (digits.isEmpty()) onValueChange("")
@@ -81,7 +92,7 @@ fun TimeWheelInput(
             },
             singleLine = true,
             textStyle = TextStyle(
-                color = Color.White,
+                color = primaryTextColor,
                 fontSize = 22.sp,
                 textAlign = TextAlign.Center,
                 fontWeight = FontWeight.Bold
@@ -91,20 +102,20 @@ fun TimeWheelInput(
             decorationBox = { innerTextField ->
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     innerTextField()
-                    HorizontalDivider(color = accentColor, modifier = Modifier.padding(top = 3.dp))
+                    HorizontalDivider(color = activeAccentColor, modifier = Modifier.padding(top = 3.dp))
                 }
             }
         )
         Text(
             text = ((value.toIntOrNull() ?: 0) + 1).coerceAtMost(maxValue).toString(),
-            color = Color(0xFF687078),
+            color = secondaryTextColor,
             fontSize = 17.sp
         )
         Text(
             "⌄",
-            color = accentColor,
+            color = activeAccentColor,
             fontSize = 22.sp,
-            modifier = Modifier.clickable { changeBy(-1) }.padding(horizontal = 30.dp, vertical = 3.dp)
+            modifier = Modifier.clickable(enabled = enabled) { changeBy(-1) }.padding(horizontal = 30.dp, vertical = 3.dp)
         )
     }
 }
