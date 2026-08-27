@@ -109,7 +109,7 @@ fun RoomCard(
                 ) {
                     Text(
                         text = if (room.isMaintenance) "—" else formatTime(room.seconds),
-                        color = AppText,
+                        color = room.gridTimerColor(),
                         fontSize = 30.sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
@@ -267,6 +267,14 @@ private fun DashboardRoomState.actionColor(): Color = when (this) {
 private fun DashboardRoomState.actionContentColor(): Color = when (this) {
     DashboardRoomState.RUNNING -> Color(0xFF111416)
     else -> Color.White
+}
+
+private fun RoomInfo.gridTimerColor(): Color = when {
+    isMaintenance -> ManagerStatusColors.Maintenance
+    status == RoomStatus.FINISHED || seconds <= 0 -> Color(0xFFFF4B4B)
+    seconds <= 5 * 60 -> Color(0xFFFF4B4B)
+    seconds <= 10 * 60 -> Color(0xFFFFA726)
+    else -> AppText
 }
 
 private fun RoomInfo.expectedEndDescription(): String = if (isRunning && seconds > 0) {
