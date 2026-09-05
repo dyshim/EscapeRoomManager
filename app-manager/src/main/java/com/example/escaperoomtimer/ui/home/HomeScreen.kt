@@ -1,5 +1,6 @@
 package com.example.escaperoomtimer.ui.home
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -87,6 +88,10 @@ fun HomeScreen(
     val storeDisplayName = remember(context) {
         StoreInfoPreferences.load(context).displayName
             .takeUnless { it.isBlank() || it == "매장명 미설정" }
+    }
+
+    BackHandler(enabled = drawerState.isOpen) {
+        scope.launch { drawerState.close() }
     }
 
     LaunchedEffect(Unit) {

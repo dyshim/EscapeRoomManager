@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -257,6 +258,17 @@ fun SettingScreen(
         }
     }
 
+    val handleBack = {
+        when {
+            currentPage == SettingPage.MENU -> onBack()
+            currentPage == SettingPage.STORE && storeInfoChanged -> showDiscardStoreChanges = true
+            currentPage == SettingPage.BACKUP_CREATE || currentPage == SettingPage.BACKUP_RESTORE -> currentPage = SettingPage.BACKUP
+            currentPage == SettingPage.ROOMS && selectedRoomId != null -> selectedRoomId = null
+            else -> currentPage = SettingPage.MENU
+        }
+    }
+    BackHandler(onBack = handleBack)
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -265,15 +277,7 @@ fun SettingScreen(
     ) {
         SettingTopBar(
             page = currentPage,
-            onBack = {
-                when {
-                    currentPage == SettingPage.MENU -> onBack()
-                    currentPage == SettingPage.STORE && storeInfoChanged -> showDiscardStoreChanges = true
-                    currentPage == SettingPage.BACKUP_CREATE || currentPage == SettingPage.BACKUP_RESTORE -> currentPage = SettingPage.BACKUP
-                    currentPage == SettingPage.ROOMS && selectedRoomId != null -> selectedRoomId = null
-                    else -> currentPage = SettingPage.MENU
-                }
-            }
+            onBack = handleBack
         )
 
         Spacer(Modifier.height(14.dp))

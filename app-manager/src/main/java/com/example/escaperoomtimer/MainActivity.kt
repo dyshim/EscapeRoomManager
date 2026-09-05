@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -124,7 +125,9 @@ fun EscapeRoomManagerApp(onExitApp: () -> Unit) {
             if (roomId == null || room == null || !room.isEnabled) {
                 screenMode = ScreenMode.HOME
             } else {
-                TimerScreen(roomId = roomId, onBack = { screenMode = ScreenMode.HOME })
+                val returnHome = { screenMode = ScreenMode.HOME }
+                BackHandler(onBack = returnHome)
+                TimerScreen(roomId = roomId, onBack = returnHome)
             }
         }
     }
