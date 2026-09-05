@@ -261,6 +261,7 @@ fun SettingScreen(
     val handleBack = {
         when {
             currentPage == SettingPage.MENU -> onBack()
+            currentPage == SettingPage.SERVER && openServerPage -> onBack()
             currentPage == SettingPage.STORE && storeInfoChanged -> showDiscardStoreChanges = true
             currentPage == SettingPage.BACKUP_CREATE || currentPage == SettingPage.BACKUP_RESTORE -> currentPage = SettingPage.BACKUP
             currentPage == SettingPage.ROOMS && selectedRoomId != null -> selectedRoomId = null
