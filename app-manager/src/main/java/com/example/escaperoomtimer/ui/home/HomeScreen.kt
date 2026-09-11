@@ -189,6 +189,7 @@ fun HomeScreen(
                     items(rooms, key = { it.id }) { room ->
                         RoomCard(
                             room = room,
+                            connectedDeviceCount = ManagerTcpServer.connectedCount(room.id),
                             onTimerClick = { onRoomClick(room) },
                             onResetClick = { resetRoom = room },
                             onActionClick = {

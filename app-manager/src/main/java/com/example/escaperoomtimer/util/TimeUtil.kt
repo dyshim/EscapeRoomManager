@@ -11,6 +11,16 @@ fun formatTime(seconds: Int): String {
     return "%02d:%02d".format(min, sec)
 }
 
+fun formatRemainingTime(seconds: Int): String {
+    val safeSeconds = seconds.coerceAtLeast(0)
+    if (safeSeconds < 60 * 60) return formatTime(safeSeconds)
+
+    val hours = safeSeconds / (60 * 60)
+    val minutes = (safeSeconds % (60 * 60)) / 60
+    val remainingSeconds = safeSeconds % 60
+    return "%02d:%02d:%02d".format(hours, minutes, remainingSeconds)
+}
+
 fun nowText(): String {
     val formatter = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.KOREA)
     return formatter.format(Date())

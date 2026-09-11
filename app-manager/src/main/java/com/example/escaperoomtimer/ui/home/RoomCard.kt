@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -19,6 +18,10 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -31,6 +34,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -39,10 +43,7 @@ import com.example.escaperoomtimer.model.RoomStatus
 import com.example.escaperoomtimer.ui.common.ManagerStatusColors
 import com.example.escaperoomtimer.ui.theme.AppText
 import com.example.escaperoomtimer.ui.theme.AppTextSecondary
-import com.example.escaperoomtimer.util.formatTime
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import com.example.escaperoomtimer.util.formatRemainingTime
 
 private enum class DashboardRoomState(val label: String) {
     WAITING("대기"),
@@ -55,6 +56,7 @@ private enum class DashboardRoomState(val label: String) {
 @Composable
 fun RoomCard(
     room: RoomInfo,
+    connectedDeviceCount: Int,
     onTimerClick: () -> Unit,
     onResetClick: () -> Unit,
     onActionClick: () -> Unit
@@ -64,7 +66,7 @@ fun RoomCard(
     val cardColor = if (state == DashboardRoomState.RUNNING) Color(0xFF1A1E21) else Color(0xFF111416)
 
     Surface(
-        modifier = Modifier.fillMaxWidth().height(160.dp),
+        modifier = Modifier.fillMaxWidth().height(172.dp),
         shape = RoundedCornerShape(16.dp),
         color = cardColor,
         tonalElevation = 0.dp,
@@ -73,57 +75,42 @@ fun RoomCard(
         Row {
             Box(modifier = Modifier.width(4.dp).fillMaxHeight().background(stateColor))
             Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().height(36.dp).padding(start = 10.dp, end = 8.dp, top = 7.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = room.name,
-                        color = AppText,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Text(
-                        text = state.label,
-                        color = stateColor,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier
-                            .padding(start = 5.dp)
-                            .background(stateColor.copy(alpha = 0.16f), RoundedCornerShape(12.dp))
-                            .padding(horizontal = 5.dp, vertical = 4.dp)
-                    )
-                }
+                ThemeName(
+                    name = room.name,
+                    modifier = Modifier.fillMaxWidth().height(44.dp).padding(horizontal = 8.dp)
+                )
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
                         .clickable(onClick = onTimerClick)
-                        .heightIn(min = 48.dp)
                         .semantics { contentDescription = "${room.name} 상세 화면" },
                     verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = if (room.isMaintenance) "—" else formatTime(room.seconds),
+                        text = if (room.isMaintenance) "—" else formatRemainingTime(room.seconds),
                         color = room.gridTimerColor(),
                         fontSize = 30.sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         style = TextStyle(fontFeatureSettings = "tnum")
                     )
-                    Text(
-                        text = if (room.isMaintenance) "타이머 잠김" else room.expectedEndDescription(),
-                        color = AppTextSecondary,
-                        fontSize = 12.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 2.dp)
-                    )
+                    if (room.isMaintenance) {
+                        Text(
+                            text = "타이머 잠김",
+                            color = AppTextSecondary,
+                            fontSize = 10.sp,
+                            maxLines = 1
+                        )
+                    }
                 }
+                RoomStatusRow(
+                    label = state.label,
+                    stateColor = stateColor,
+                    connectedDeviceCount = connectedDeviceCount,
+                    modifier = Modifier.fillMaxWidth().height(24.dp).padding(horizontal = 10.dp)
+                )
                 HorizontalDivider(color = Color(0xFF30363B))
                 if (room.isMaintenance) {
                     MaintenanceLockControl(
@@ -190,6 +177,60 @@ private fun RoomControl(
             fontWeight = FontWeight.Bold,
             maxLines = 1
         )
+    }
+}
+
+@Composable
+private fun ThemeName(name: String, modifier: Modifier = Modifier) {
+    val fontSizes = listOf(18.sp, 17.sp, 16.sp)
+    var fontSizeIndex by remember(name) { mutableIntStateOf(0) }
+    val fontSize = fontSizes[fontSizeIndex]
+
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        Text(
+            text = name,
+            color = AppText,
+            fontSize = fontSize,
+            lineHeight = (fontSize.value + 2).sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            onTextLayout = { result ->
+                if ((result.didOverflowWidth || result.didOverflowHeight) && fontSizeIndex < fontSizes.lastIndex) {
+                    fontSizeIndex += 1
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun RoomStatusRow(
+    label: String,
+    stateColor: Color,
+    connectedDeviceCount: Int,
+    modifier: Modifier = Modifier
+) {
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = label,
+            color = stateColor,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier
+                .background(stateColor.copy(alpha = 0.16f), RoundedCornerShape(12.dp))
+                .padding(horizontal = 6.dp, vertical = 3.dp)
+        )
+        Spacer(Modifier.weight(1f))
+        if (connectedDeviceCount > 0) {
+            Text(
+                text = "연결 $connectedDeviceCount",
+                color = AppTextSecondary,
+                fontSize = 10.sp,
+                maxLines = 1
+            )
+        }
     }
 }
 
@@ -276,11 +317,3 @@ private fun RoomInfo.gridTimerColor(): Color = when {
     seconds <= 10 * 60 -> Color(0xFFFFA726)
     else -> AppText
 }
-
-private fun RoomInfo.expectedEndDescription(): String = if (isRunning && seconds > 0) {
-    "종료 예정 ${formatClock(System.currentTimeMillis() + seconds * 1_000L)}"
-} else {
-    "종료 예정 --:--"
-}
-
-private fun formatClock(epochMillis: Long): String = SimpleDateFormat("HH:mm", Locale.KOREA).format(Date(epochMillis))

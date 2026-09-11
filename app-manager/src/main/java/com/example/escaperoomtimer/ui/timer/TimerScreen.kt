@@ -63,6 +63,7 @@ import com.example.escaperoomtimer.manager.TimerManager
 import com.example.escaperoomtimer.model.RoomStatus
 import com.example.escaperoomtimer.ui.common.ManagerStatusColors
 import com.example.escaperoomtimer.ui.common.TimeWheelInput
+import com.example.escaperoomtimer.util.formatRemainingTime
 import com.example.escaperoomtimer.util.formatTime
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
@@ -174,13 +175,17 @@ fun TimerScreen(
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = if (room.isMaintenance) "—" else formatTime(room.seconds),
+                text = if (room.isMaintenance) "—" else formatRemainingTime(room.seconds),
                 color = timerColor(room.seconds, room.status, room.isMaintenance),
                 fontSize = 48.sp,
                 fontWeight = FontWeight.Bold
             )
             if (!room.isMaintenance) {
-                Text(text = "분 : 초", color = Color(0xFF8F989F), fontSize = 12.sp)
+                Text(
+                    text = if (room.seconds >= 60 * 60) "시 : 분 : 초" else "분 : 초",
+                    color = Color(0xFF8F989F),
+                    fontSize = 12.sp
+                )
             }
             HorizontalDivider(
                 modifier = Modifier.padding(top = 10.dp, bottom = 10.dp),
