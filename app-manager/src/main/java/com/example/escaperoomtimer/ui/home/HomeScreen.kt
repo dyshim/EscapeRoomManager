@@ -22,6 +22,8 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -53,9 +55,11 @@ import com.example.escaperoomtimer.model.RoomStatus
 import com.example.escaperoomtimer.network.ManagerTcpServer
 import com.example.escaperoomtimer.settings.StoreInfoPreferences
 import com.example.escaperoomtimer.ui.common.ManagerStatusColors
+import com.example.escaperoomtimer.ui.common.DirectTimeSetDialog
+import com.example.escaperoomtimer.ui.common.TimerResetConfirmationDialog
 import com.example.escaperoomtimer.ui.theme.AppText
 import com.example.escaperoomtimer.ui.theme.AppTextSecondary
-import com.example.escaperoomtimer.util.formatTime
+import com.example.escaperoomtimer.util.formatRemainingTime
 import com.example.escaperoomtimer.util.localIpv4Address
 import com.example.escaperoomtimer.web.ManagerWebServer
 import java.text.SimpleDateFormat
@@ -73,6 +77,8 @@ fun HomeScreen(
     rooms: List<RoomInfo>,
     onRoomClick: (RoomInfo) -> Unit,
     onRoomAction: (RoomInfo) -> Unit,
+    onRoomAdjust: (RoomInfo, Int) -> Unit,
+    onRoomSetTime: (RoomInfo, Int) -> Unit,
     onRoomReset: (RoomInfo) -> Unit,
     onSettingsClick: () -> Unit,
     onServerClick: () -> Unit,
@@ -84,6 +90,8 @@ fun HomeScreen(
     var currentDateTime by remember { mutableStateOf(Date()) }
     var localIp by remember { mutableStateOf(localIpv4Address()) }
     var resetRoom by remember { mutableStateOf<RoomInfo?>(null) }
+    var adjustmentRoomId by remember { mutableStateOf<String?>(null) }
+    var directSetRoomId by remember { mutableStateOf<String?>(null) }
     var showAppInfo by remember { mutableStateOf(false) }
     val storeDisplayName = remember(context) {
         StoreInfoPreferences.load(context).displayName
@@ -191,7 +199,14 @@ fun HomeScreen(
                             room = room,
                             connectedDeviceCount = ManagerTcpServer.connectedCount(room.id),
                             onTimerClick = { onRoomClick(room) },
-                            onResetClick = { resetRoom = room },
+                            onAdjustClick = { adjustmentRoomId = room.id },
+                            onResetClick = {
+                                if (room.status == RoomStatus.FINISHED || room.seconds <= 0) {
+                                    onRoomReset(room)
+                                } else {
+                                    resetRoom = room
+                                }
+                            },
                             onActionClick = {
                                 if (room.status != RoomStatus.FINISHED && room.seconds > 0) {
                                     onRoomAction(room)
@@ -208,23 +223,40 @@ fun HomeScreen(
     }
 
     resetRoom?.let { room ->
-        AlertDialog(
-            onDismissRequest = { resetRoom = null },
-            title = { Text("초기화") },
-            text = {
-                Text(
-                    "남은 시간을 ${formatTime(room.defaultSeconds)}으로 되돌릴까요?\n" +
-                        "시작 및 종료 시간 기록도 초기화됩니다."
-                )
-            },
-            dismissButton = { TextButton(onClick = { resetRoom = null }) { Text("취소") } },
-            confirmButton = {
-                TextButton(onClick = {
-                    onRoomReset(room)
-                    resetRoom = null
-                }) { Text("초기화") }
+        TimerResetConfirmationDialog(
+            themeName = room.name,
+            onDismiss = { resetRoom = null },
+            onConfirm = {
+                onRoomReset(room)
+                resetRoom = null
             }
         )
+    }
+    adjustmentRoomId?.let { roomId ->
+        rooms.firstOrNull { it.id == roomId }?.let { room ->
+            DashboardTimeAdjustmentDialog(
+                room = room,
+                onDismiss = { adjustmentRoomId = null },
+                onAdjust = { onRoomAdjust(room, it) },
+                onDirectSet = {
+                    adjustmentRoomId = null
+                    directSetRoomId = room.id
+                }
+            )
+        } ?: run { adjustmentRoomId = null }
+    }
+    directSetRoomId?.let { roomId ->
+        rooms.firstOrNull { it.id == roomId }?.let { room ->
+            DirectTimeSetDialog(
+                themeName = room.name,
+                initialSeconds = room.seconds,
+                onDismiss = { directSetRoomId = null },
+                onApply = {
+                    onRoomSetTime(room, it)
+                    directSetRoomId = null
+                }
+            )
+        } ?: run { directSetRoomId = null }
     }
     if (showAppInfo) {
         AlertDialog(
@@ -355,6 +387,60 @@ private fun ServerInfoCard(status: ServerStatus, onClick: () -> Unit) {
         Text(status.label, color = AppText, fontSize = 13.sp, modifier = Modifier.padding(start = 6.dp))
         Text("›", color = AppText, fontSize = 25.sp, modifier = Modifier.padding(start = 12.dp))
     }
+}
+
+@Composable
+private fun DashboardTimeAdjustmentDialog(
+    room: RoomInfo,
+    onDismiss: () -> Unit,
+    onAdjust: (Int) -> Unit,
+    onDirectSet: () -> Unit
+) {
+    val adjustmentEnabled = !room.isMaintenance &&
+        room.status != RoomStatus.FINISHED && room.seconds > 0
+    val directSetEnabled = !room.isMaintenance &&
+        room.status == RoomStatus.WAITING && !room.isRunning && room.seconds > 0
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("시간 조정 · ${room.name}") },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    formatRemainingTime(room.seconds),
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(-60 to "−1분", 60 to "+1분").forEach { (seconds, label) ->
+                        Button(
+                            onClick = { onAdjust(seconds) },
+                            enabled = adjustmentEnabled,
+                            modifier = Modifier.weight(1f)
+                        ) { Text(label) }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(-300 to "−5분", 300 to "+5분").forEach { (seconds, label) ->
+                        Button(
+                            onClick = { onAdjust(seconds) },
+                            enabled = adjustmentEnabled,
+                            modifier = Modifier.weight(1f)
+                        ) { Text(label) }
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                Button(
+                    onClick = onDirectSet,
+                    enabled = directSetEnabled,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7134C8))
+                ) { Text("직접 설정") }
+            }
+        },
+        confirmButton = {}
+    )
 }
 
 private fun formatDashboardDate(date: Date): String = SimpleDateFormat("yyyy.MM.dd", Locale.KOREA).format(date)

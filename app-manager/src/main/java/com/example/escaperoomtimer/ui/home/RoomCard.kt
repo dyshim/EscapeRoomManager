@@ -58,6 +58,7 @@ fun RoomCard(
     room: RoomInfo,
     connectedDeviceCount: Int,
     onTimerClick: () -> Unit,
+    onAdjustClick: () -> Unit,
     onResetClick: () -> Unit,
     onActionClick: () -> Unit
 ) {
@@ -118,28 +119,37 @@ fun RoomCard(
                         modifier = Modifier.fillMaxWidth().height(52.dp)
                     )
                 } else {
-                    Row(modifier = Modifier.fillMaxWidth().height(52.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         RoomControl(
-                            label = "초기화",
-                            type = RoomControlType.RESET,
+                            label = "시간 조정",
+                            symbol = "±",
                             backgroundColor = Color.Transparent,
                             contentColor = AppTextSecondary,
+                            enabled = state != DashboardRoomState.FINISHED,
+                            onClick = onAdjustClick,
+                            modifier = Modifier.weight(1f)
+                        )
+                        RoomControl(
+                            label = state.actionLabel(),
+                            symbol = if (state == DashboardRoomState.RUNNING) "Ⅱ" else "▶",
+                            backgroundColor = state.actionColor(),
+                            contentColor = state.actionContentColor(),
+                            enabled = state != DashboardRoomState.FINISHED,
+                            onClick = onActionClick,
+                            modifier = Modifier.weight(1f)
+                        )
+                        RoomControl(
+                            label = "초기화",
+                            symbol = "↺",
+                            backgroundColor = Color.Transparent,
+                            contentColor = AppTextSecondary,
+                            enabled = state != DashboardRoomState.WAITING,
                             onClick = onResetClick,
                             modifier = Modifier.weight(1f)
                         )
-                        Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(Color(0xFF30363B)))
-                        if (state == DashboardRoomState.FINISHED) {
-                            Spacer(modifier = Modifier.weight(1f).fillMaxHeight())
-                        } else {
-                            RoomControl(
-                                label = state.actionLabel(),
-                                type = state.controlType(),
-                                backgroundColor = state.actionColor(),
-                                contentColor = state.actionContentColor(),
-                                onClick = onActionClick,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
                     }
                 }
             }
@@ -147,36 +157,40 @@ fun RoomCard(
     }
 }
 
-private enum class RoomControlType { RESET, PLAY, PAUSE }
-
 @Composable
 private fun RoomControl(
     label: String,
-    type: RoomControlType,
+    symbol: String,
     backgroundColor: Color,
     contentColor: Color,
+    enabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(
         modifier = modifier
             .fillMaxHeight()
-            .background(backgroundColor)
-            .clickable(onClick = onClick)
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = when (type) {
-                RoomControlType.RESET -> "↺"
-                RoomControlType.PLAY -> "▶"
-                RoomControlType.PAUSE -> "Ⅱ"
-            },
-            color = contentColor,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1
-        )
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .background(
+                    if (enabled) backgroundColor else Color.Transparent,
+                    RoundedCornerShape(22.dp)
+                )
+                .clickable(enabled = enabled, onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = symbol,
+                color = if (enabled) contentColor else contentColor.copy(alpha = 0.32f),
+                fontSize = 21.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1
+            )
+        }
     }
 }
 
@@ -271,14 +285,6 @@ private fun DashboardRoomState.actionLabel(): String = when (this) {
     DashboardRoomState.PAUSED -> "재개"
     DashboardRoomState.FINISHED -> "비활성"
     DashboardRoomState.MAINTENANCE -> "타이머 잠김"
-}
-
-private fun DashboardRoomState.controlType(): RoomControlType = when (this) {
-    DashboardRoomState.WAITING,
-    DashboardRoomState.PAUSED -> RoomControlType.PLAY
-    DashboardRoomState.RUNNING -> RoomControlType.PAUSE
-    DashboardRoomState.FINISHED,
-    DashboardRoomState.MAINTENANCE -> RoomControlType.RESET
 }
 
 private fun RoomInfo.dashboardState(): DashboardRoomState = when {

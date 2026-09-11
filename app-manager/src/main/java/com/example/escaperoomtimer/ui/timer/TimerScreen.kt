@@ -23,16 +23,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -40,7 +35,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -52,17 +46,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.escaperoomtimer.alarm.ManagerGameEndAlarmController
 import com.example.escaperoomtimer.manager.TimerManager
 import com.example.escaperoomtimer.model.RoomStatus
 import com.example.escaperoomtimer.ui.common.ManagerStatusColors
-import com.example.escaperoomtimer.ui.common.TimeWheelInput
+import com.example.escaperoomtimer.ui.common.DirectTimeSetContent
+import com.example.escaperoomtimer.ui.common.TimerResetConfirmationDialog
 import com.example.escaperoomtimer.util.formatRemainingTime
 import com.example.escaperoomtimer.util.formatTime
 import kotlinx.coroutines.delay
@@ -87,8 +81,6 @@ fun TimerScreen(
         context.getSharedPreferences(TIMER_UI_PREFS, Context.MODE_PRIVATE)
     }
 
-    var minuteInput by remember(room.id) { mutableStateOf((room.seconds / 60).toString()) }
-    var secondInput by remember(room.id) { mutableStateOf((room.seconds % 60).toString()) }
     var undoSnapshot by remember(room.id) { mutableStateOf<UndoSnapshot?>(null) }
     var undoVersion by remember(room.id) { mutableIntStateOf(0) }
     var adjustmentIndex by remember(room.id) { mutableIntStateOf(2) }
@@ -130,7 +122,7 @@ fun TimerScreen(
             .padding(horizontal = 16.dp, vertical = 14.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Box(modifier = Modifier.fillMaxWidth()) {
+        Box(modifier = Modifier.fillMaxWidth().height(64.dp)) {
             Text(
                 text = "←",
                 color = Color.White,
@@ -139,17 +131,11 @@ fun TimerScreen(
                     .align(Alignment.CenterStart)
                     .clickable { onBack() }
             )
-            Row(
+            Column(
                 modifier = Modifier.align(Alignment.Center),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
-                    text = room.name,
-                    color = Color.White,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Medium
-                )
+                TimerDetailThemeName(room.name)
                 StatusBadge(room.status, room.isRunning, room.isMaintenance)
             }
             WifiStatusIcon(
@@ -272,7 +258,14 @@ fun TimerScreen(
                 Spacer(Modifier.height(8.dp))
             }
             OutlinedButton(
-                onClick = { resetConfirmationVisible = true },
+                onClick = {
+                    if (room.status == RoomStatus.FINISHED || room.seconds <= 0) {
+                        TimerManager.reset(room.id)
+                    } else {
+                        resetConfirmationVisible = true
+                    }
+                },
+                enabled = room.status != RoomStatus.WAITING || room.isRunning,
                 modifier = Modifier.fillMaxWidth().height(48.dp),
                 shape = RoundedCornerShape(12.dp),
                 border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF7D858B))
@@ -390,72 +383,26 @@ fun TimerScreen(
                     .background(Color(0xFF11171B), RoundedCornerShape(10.dp))
                     .padding(14.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TimeWheelInput(
-                        value = minuteInput,
-                        onValueChange = { minuteInput = it },
-                        modifier = Modifier.weight(1f),
-                        label = "분",
-                        maxValue = 999,
-                        maxDigits = 3,
-                        enabled = !room.isMaintenance
-                    )
-                    Text(":", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                    TimeWheelInput(
-                        value = secondInput,
-                        onValueChange = { secondInput = it },
-                        modifier = Modifier.weight(1f),
-                        label = "초",
-                        maxValue = 59,
-                        maxDigits = 2,
-                        enabled = !room.isMaintenance
-                    )
-                }
-                Text(
-                    "위아래로 밀거나 숫자를 눌러 입력하세요.",
-                    color = Color(0xFF9EA7AD),
-                    fontSize = 12.sp,
-                    modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 4.dp, bottom = 8.dp)
-                )
-                TimerButton(
-                    text = "입력 시간 적용",
-                    color = Color(0xFF7134C8),
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !room.isMaintenance,
-                    onClick = {
-                        val minutes = minuteInput.toIntOrNull()?.coerceIn(0, 999) ?: 0
-                        val seconds = secondInput.toIntOrNull()?.coerceIn(0, 59) ?: 0
+                DirectTimeSetContent(
+                    initialSeconds = room.seconds,
+                    enabled = !room.isMaintenance && room.status == RoomStatus.WAITING && !room.isRunning,
+                    onCancel = { directInputExpanded = false },
+                    onApply = { totalSeconds ->
                         rememberBeforeChange()
-                        TimerManager.setTime(room.id, minutes * 60 + seconds)
+                        TimerManager.setTime(room.id, totalSeconds)
+                        directInputExpanded = false
                     }
                 )
             }
         }
 
         if (resetConfirmationVisible) {
-            AlertDialog(
-                onDismissRequest = { resetConfirmationVisible = false },
-                title = { Text("초기화") },
-                text = {
-                    Text(
-                        "남은 시간을 ${formatTime(room.defaultSeconds)}으로 되돌릴까요?\n" +
-                            "시작 및 종료 시간 기록도 초기화됩니다."
-                    )
-                },
-                dismissButton = {
-                    TextButton(onClick = { resetConfirmationVisible = false }) { Text("취소") }
-                },
-                confirmButton = {
-                    TextButton(onClick = {
-                        TimerManager.reset(room.id)
-                        minuteInput = (room.defaultSeconds / 60).toString()
-                        secondInput = (room.defaultSeconds % 60).toString()
-                        resetConfirmationVisible = false
-                    }) { Text("초기화", color = Color(0xFF9C6ADE)) }
+            TimerResetConfirmationDialog(
+                themeName = room.name,
+                onDismiss = { resetConfirmationVisible = false },
+                onConfirm = {
+                    TimerManager.reset(room.id)
+                    resetConfirmationVisible = false
                 }
             )
         }
@@ -473,8 +420,6 @@ fun TimerScreen(
                         startedAtEpochMillis = snapshot.startedAtEpochMillis,
                         finishedAtEpochMillis = snapshot.finishedAtEpochMillis
                     )
-                    minuteInput = (snapshot.seconds / 60).toString()
-                    secondInput = (snapshot.seconds % 60).toString()
                     undoSnapshot = null
                 }
             )
@@ -482,6 +427,29 @@ fun TimerScreen(
 
         Spacer(Modifier.height(28.dp))
     }
+}
+
+@Composable
+private fun TimerDetailThemeName(name: String) {
+    val fontSizes = listOf(17.sp, 16.sp, 15.sp)
+    var fontSizeIndex by remember(name) { mutableIntStateOf(0) }
+    val fontSize = fontSizes[fontSizeIndex]
+    Text(
+        text = name,
+        color = Color.White,
+        fontSize = fontSize,
+        lineHeight = (fontSize.value + 2).sp,
+        fontWeight = FontWeight.Medium,
+        textAlign = TextAlign.Center,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 52.dp),
+        onTextLayout = { result ->
+            if ((result.didOverflowWidth || result.didOverflowHeight) && fontSizeIndex < fontSizes.lastIndex) {
+                fontSizeIndex += 1
+            }
+        }
+    )
 }
 
 private data class UndoSnapshot(

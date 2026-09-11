@@ -98,6 +98,8 @@ fun EscapeRoomManagerApp(onExitApp: () -> Unit) {
                 screenMode = ScreenMode.STAFF_TIMER
             },
             onRoomAction = { room -> TimerManager.startOrPause(room.id) },
+            onRoomAdjust = { room, deltaSeconds -> TimerManager.adjustSeconds(room.id, deltaSeconds) },
+            onRoomSetTime = { room, seconds -> TimerManager.setTime(room.id, seconds) },
             onRoomReset = { room -> TimerManager.reset(room.id) },
             onSettingsClick = { screenMode = ScreenMode.SETTING },
             onServerClick = { screenMode = ScreenMode.SERVER_SETTING },
