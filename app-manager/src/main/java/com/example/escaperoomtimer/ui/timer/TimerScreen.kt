@@ -645,11 +645,11 @@ fun StatusBadge(status: RoomStatus, isRunning: Boolean, isMaintenance: Boolean =
         RoomStatus.FINISHED -> ManagerStatusColors.Finished
     }
 
-    Box(
-        modifier = Modifier
-            .background(color.copy(alpha = 0.16f), RoundedCornerShape(999.dp))
-            .padding(horizontal = 8.dp, vertical = 4.dp)
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
+        Canvas(modifier = Modifier.size(6.dp)) { drawCircle(color) }
         Text(label, color = color, fontSize = 10.sp, fontWeight = FontWeight.Bold)
     }
 }

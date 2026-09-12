@@ -6,7 +6,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -233,20 +232,14 @@ private fun RoomStatusRow(
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier) {
-        Row(
+        Text(
+            text = label,
+            color = stateColor,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
             modifier = Modifier.align(Alignment.Center),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Canvas(modifier = Modifier.size(6.dp)) { drawCircle(stateColor) }
-            Spacer(Modifier.width(4.dp))
-            Text(
-                text = label,
-                color = stateColor,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1
-            )
-        }
+        )
         if (connectedDeviceCount > 0) {
             Text(
                 text = "연결 $connectedDeviceCount",
