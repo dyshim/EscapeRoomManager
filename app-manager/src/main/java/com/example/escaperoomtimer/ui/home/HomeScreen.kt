@@ -168,9 +168,9 @@ fun HomeScreen(
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 12.dp, top = 8.dp, end = 12.dp, bottom = 20.dp),
+                contentPadding = PaddingValues(start = 12.dp, top = 6.dp, end = 12.dp, bottom = 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 item(key = "theme-summary", span = { GridItemSpan(maxLineSpan) }) {
                     ThemeSummary(rooms = rooms)
@@ -280,7 +280,7 @@ private fun DashboardHeader(
         modifier = Modifier
             .fillMaxWidth()
             .background(Color.Black)
-            .padding(start = 8.dp, top = 4.dp, end = 16.dp, bottom = 6.dp)
+            .padding(start = 8.dp, top = 4.dp, end = 16.dp, bottom = 4.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().height(48.dp),
@@ -345,7 +345,7 @@ private fun ThemeSummary(rooms: List<RoomInfo>) {
             Text("전체 ${rooms.size}", color = AppTextSecondary, fontSize = 14.sp)
         }
         Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             SummaryStatus("진행", running, ManagerStatusColors.Running)
@@ -375,7 +375,7 @@ private fun ServerInfoCard(status: ServerStatus, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(52.dp)
+            .height(48.dp)
             .border(1.dp, DashboardBorder, RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp),

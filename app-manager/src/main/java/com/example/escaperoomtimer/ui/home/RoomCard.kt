@@ -67,7 +67,7 @@ fun RoomCard(
     val cardColor = if (state == DashboardRoomState.RUNNING) Color(0xFF1A1E21) else Color(0xFF111416)
 
     Surface(
-        modifier = Modifier.fillMaxWidth().height(172.dp),
+        modifier = Modifier.fillMaxWidth().height(164.dp),
         shape = RoundedCornerShape(16.dp),
         color = cardColor,
         tonalElevation = 0.dp,
