@@ -176,20 +176,26 @@ private fun RoomControl(
         Box(
             modifier = Modifier
                 .size(44.dp)
-                .background(
-                    if (enabled) backgroundColor else Color.Transparent,
-                    RoundedCornerShape(22.dp)
-                )
                 .clickable(enabled = enabled, onClick = onClick),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = symbol,
-                color = if (enabled) contentColor else contentColor.copy(alpha = 0.32f),
-                fontSize = 21.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1
-            )
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .background(
+                        if (enabled) backgroundColor else Color.Transparent,
+                        RoundedCornerShape(18.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = symbol,
+                    color = if (enabled) contentColor else contentColor.copy(alpha = 0.32f),
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
+                )
+            }
         }
     }
 }
@@ -226,23 +232,28 @@ private fun RoomStatusRow(
     connectedDeviceCount: Int,
     modifier: Modifier = Modifier
 ) {
-    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = label,
-            color = stateColor,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier
-                .background(stateColor.copy(alpha = 0.16f), RoundedCornerShape(12.dp))
-                .padding(horizontal = 6.dp, vertical = 3.dp)
-        )
-        Spacer(Modifier.weight(1f))
+    Box(modifier = modifier) {
+        Row(
+            modifier = Modifier.align(Alignment.Center),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Canvas(modifier = Modifier.size(6.dp)) { drawCircle(stateColor) }
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = label,
+                color = stateColor,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1
+            )
+        }
         if (connectedDeviceCount > 0) {
             Text(
                 text = "연결 $connectedDeviceCount",
                 color = AppTextSecondary,
                 fontSize = 10.sp,
-                maxLines = 1
+                maxLines = 1,
+                modifier = Modifier.align(Alignment.CenterEnd)
             )
         }
     }
