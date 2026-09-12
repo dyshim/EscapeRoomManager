@@ -7,6 +7,7 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.os.Handler
 import android.os.Looper
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -90,6 +91,10 @@ fun TimerScreen(
         mutableStateOf(uiPreferences.getBoolean(KEY_TIME_ADJUSTMENT_EXPANDED, true))
     }
     val adjustmentOptions = remember { listOf(30, 60, 5 * 60, 10 * 60) }
+
+    BackHandler(enabled = directInputExpanded) {
+        directInputExpanded = false
+    }
 
     LaunchedEffect(undoVersion) {
         if (undoVersion > 0) {
