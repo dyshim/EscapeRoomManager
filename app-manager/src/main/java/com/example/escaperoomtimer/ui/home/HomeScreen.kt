@@ -57,6 +57,8 @@ import com.example.escaperoomtimer.settings.StoreInfoPreferences
 import com.example.escaperoomtimer.ui.common.ManagerStatusColors
 import com.example.escaperoomtimer.ui.common.DirectTimeSetDialog
 import com.example.escaperoomtimer.ui.common.TimerResetConfirmationDialog
+import com.example.escaperoomtimer.ui.common.WifiStatusIcon
+import com.example.escaperoomtimer.ui.common.rememberWifiConnected
 import com.example.escaperoomtimer.ui.theme.AppText
 import com.example.escaperoomtimer.ui.theme.AppTextSecondary
 import com.example.escaperoomtimer.util.formatRemainingTime
@@ -89,6 +91,7 @@ fun HomeScreen(
     val scope = rememberCoroutineScope()
     var currentDateTime by remember { mutableStateOf(Date()) }
     var localIp by remember { mutableStateOf(localIpv4Address()) }
+    val wifiConnected = rememberWifiConnected()
     var resetRoom by remember { mutableStateOf<RoomInfo?>(null) }
     var adjustmentRoomId by remember { mutableStateOf<String?>(null) }
     var directSetRoomId by remember { mutableStateOf<String?>(null) }
@@ -110,9 +113,9 @@ fun HomeScreen(
         }
     }
 
-    val connected = localIp != "IP 확인 불가"
+    val localNetworkAvailable = localIp != "IP 확인 불가"
     val serverStatus = when {
-        !connected -> ServerStatus.DISCONNECTED
+        !localNetworkAvailable -> ServerStatus.DISCONNECTED
         ManagerTcpServer.isRunning && ManagerWebServer.isRunning -> ServerStatus.CONNECTED
         else -> ServerStatus.CONNECTING
     }
@@ -161,7 +164,7 @@ fun HomeScreen(
             DashboardHeader(
                 date = formatDashboardDate(currentDateTime),
                 time = formatDashboardTime(currentDateTime),
-                connected = connected,
+                wifiConnected = wifiConnected,
                 storeName = storeDisplayName,
                 onMenuClick = { scope.launch { drawerState.open() } }
             )
@@ -272,7 +275,7 @@ fun HomeScreen(
 private fun DashboardHeader(
     date: String,
     time: String,
-    connected: Boolean,
+    wifiConnected: Boolean,
     storeName: String?,
     onMenuClick: () -> Unit
 ) {
@@ -317,14 +320,13 @@ private fun DashboardHeader(
             Spacer(Modifier.weight(1f))
             Text(time, color = AppText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.weight(1f))
-            Canvas(modifier = Modifier.size(8.dp)) {
-                drawCircle(if (connected) ManagerStatusColors.Connected else ManagerStatusColors.Disconnected)
-            }
-            Text(
-                if (connected) "연결됨" else "연결 안 됨",
-                color = AppText,
-                fontSize = 13.sp,
-                modifier = Modifier.padding(start = 6.dp)
+            WifiStatusIcon(
+                connected = wifiConnected,
+                color = if (wifiConnected) {
+                    ManagerStatusColors.Connected
+                } else {
+                    ManagerStatusColors.Disconnected
+                }
             )
         }
     }
@@ -365,7 +367,7 @@ private fun SummaryStatus(label: String, count: Int, color: Color) {
 }
 
 private enum class ServerStatus(val label: String, val color: Color) {
-    CONNECTED("연결됨", ManagerStatusColors.Running),
+    CONNECTED("정상", ManagerStatusColors.Running),
     CONNECTING("연결 중", ManagerStatusColors.Paused),
     DISCONNECTED("연결 끊김", ManagerStatusColors.Disconnected)
 }
