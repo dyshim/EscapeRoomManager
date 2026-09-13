@@ -283,7 +283,7 @@ fun SettingScreen(
 
         Spacer(Modifier.height(14.dp))
         HorizontalDivider(color = Color(0xFF2A2F35))
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(10.dp))
 
         key(currentPage) {
             LazyColumn(
@@ -755,7 +755,7 @@ private fun SettingsMenu(
     onPageSelected: (SettingPage) -> Unit,
     onExitSelected: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SettingMenuCard(
             title = "매장 정보",
             description = "매장명과 지점 정보를 관리합니다.",
@@ -839,13 +839,13 @@ private fun SettingMenuCard(
         colors = CardDefaults.cardColors(containerColor = AppSurface)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 15.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(modifier = Modifier.size(44.dp), contentAlignment = Alignment.Center) {
                 SettingMenuIcon(icon = icon, color = color)
             }
-            Column(modifier = Modifier.weight(1f).padding(start = 14.dp, end = 6.dp)) {
+            Column(modifier = Modifier.weight(1f).padding(start = 12.dp, end = 4.dp)) {
                 Text(title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(3.dp))
                 Text(
@@ -864,10 +864,10 @@ private fun SettingMenuCard(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier
                         .background(badgeColor.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 7.dp, vertical = 4.dp)
+                        .padding(horizontal = 6.dp, vertical = 3.dp)
                 )
             }
-            Text("›", color = Color.White, fontSize = 28.sp, modifier = Modifier.padding(start = 6.dp))
+            Text("›", color = Color.White, fontSize = 28.sp, modifier = Modifier.padding(start = 4.dp))
         }
     }
 }
