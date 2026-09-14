@@ -107,6 +107,8 @@ private enum class SettingPage(val title: String, val subtitle: String) {
 
 private enum class SettingIcon { STORE, BELL, SHIELD, PALETTE, DOOR, BACKUP, SERVER, POWER }
 
+private enum class StoreInfoFeedback { NONE, SAVED, RESET }
+
 @Composable
 fun SettingScreen(
     rooms: List<RoomInfo>,
@@ -133,7 +135,8 @@ fun SettingScreen(
     var savedStoreInfo by remember { mutableStateOf(StoreInfoPreferences.load(context)) }
     var storeName by remember { mutableStateOf(savedStoreInfo.storeName) }
     var branchName by remember { mutableStateOf(savedStoreInfo.branchName) }
-    var storeInfoSaved by remember { mutableStateOf(false) }
+    var storeNameTouched by remember { mutableStateOf(false) }
+    var storeInfoFeedback by remember { mutableStateOf(StoreInfoFeedback.NONE) }
     var showDiscardStoreChanges by remember { mutableStateOf(false) }
     var showResetStoreInfo by remember { mutableStateOf(false) }
     var pendingRestore by remember { mutableStateOf<ManagerBackup?>(null) }
@@ -299,7 +302,13 @@ fun SettingScreen(
                             serverStatus = serverMenuStatus,
                             presetCount = presets.size,
                             roomCount = rooms.size,
-                            onPageSelected = { currentPage = it },
+                            onPageSelected = {
+                                if (it == SettingPage.STORE) {
+                                    storeNameTouched = false
+                                    storeInfoFeedback = StoreInfoFeedback.NONE
+                                }
+                                currentPage = it
+                            },
                             onExitSelected = { showExitConfirmation = true }
                         )
                     }
@@ -308,15 +317,19 @@ fun SettingScreen(
                     StoreInfoSettingsSection(
                         storeName = storeName,
                         branchName = branchName,
-                        saved = storeInfoSaved,
+                        feedback = storeInfoFeedback,
                         changed = storeInfoChanged,
+                        storeNameTouched = storeNameTouched,
+                        hasSavedStoreInfo = savedStoreInfo.storeName.isNotBlank() ||
+                            savedStoreInfo.branchName.isNotBlank(),
                         onStoreNameChange = {
                             storeName = it.take(30)
-                            storeInfoSaved = false
+                            storeNameTouched = true
+                            storeInfoFeedback = StoreInfoFeedback.NONE
                         },
                         onBranchNameChange = {
                             branchName = it.take(20)
-                            storeInfoSaved = false
+                            storeInfoFeedback = StoreInfoFeedback.NONE
                         },
                         onSave = {
                             val info = StoreInfo(storeName.trim(), branchName.trim())
@@ -324,7 +337,8 @@ fun SettingScreen(
                             savedStoreInfo = info
                             storeName = info.storeName
                             branchName = info.branchName
-                            storeInfoSaved = true
+                            storeNameTouched = false
+                            storeInfoFeedback = StoreInfoFeedback.SAVED
                         },
                         onReset = { showResetStoreInfo = true }
                     )
@@ -608,7 +622,8 @@ fun SettingScreen(
                 TextButton(onClick = {
                     storeName = savedStoreInfo.storeName
                     branchName = savedStoreInfo.branchName
-                    storeInfoSaved = false
+                    storeNameTouched = false
+                    storeInfoFeedback = StoreInfoFeedback.NONE
                     showDiscardStoreChanges = false
                     currentPage = SettingPage.MENU
                 }) { Text("나가기", color = Color(0xFFFF5252)) }
@@ -630,7 +645,8 @@ fun SettingScreen(
                     savedStoreInfo = StoreInfo()
                     storeName = ""
                     branchName = ""
-                    storeInfoSaved = true
+                    storeNameTouched = false
+                    storeInfoFeedback = StoreInfoFeedback.RESET
                     showResetStoreInfo = false
                 }) { Text("초기화", color = Color(0xFFFF5252)) }
             },
@@ -952,8 +968,10 @@ private fun SettingMenuIcon(icon: SettingIcon, color: Color) {
 private fun StoreInfoSettingsSection(
     storeName: String,
     branchName: String,
-    saved: Boolean,
+    feedback: StoreInfoFeedback,
     changed: Boolean,
+    storeNameTouched: Boolean,
+    hasSavedStoreInfo: Boolean,
     onStoreNameChange: (String) -> Unit,
     onBranchNameChange: (String) -> Unit,
     onSave: () -> Unit,
@@ -961,6 +979,7 @@ private fun StoreInfoSettingsSection(
 ) {
     val cleanStoreName = storeName.trim()
     val cleanBranchName = branchName.trim()
+    val showStoreNameError = storeNameTouched && cleanStoreName.isBlank()
     val displayName = listOf(cleanStoreName, cleanBranchName)
         .filter { it.isNotBlank() }
         .joinToString(" · ")
@@ -985,8 +1004,7 @@ private fun StoreInfoSettingsSection(
             colors = CardDefaults.cardColors(containerColor = AppSurface)
         ) {
             Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier.padding(14.dp)
             ) {
                 OutlinedTextField(
                     value = storeName,
@@ -994,12 +1012,13 @@ private fun StoreInfoSettingsSection(
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("매장명") },
                     supportingText = {
-                        Text(if (cleanStoreName.isBlank()) "매장명을 입력해 주세요." else "직원용 앱과 웹 대시보드에 표시됩니다.")
+                        Text(if (showStoreNameError) "매장명을 입력해 주세요." else "직원용 앱과 웹 대시보드에 표시됩니다.")
                     },
-                    isError = cleanStoreName.isBlank(),
+                    isError = showStoreNameError,
                     singleLine = true,
                     suffix = { Text("${storeName.length}/30") }
                 )
+                Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = branchName,
                     onValueChange = onBranchNameChange,
@@ -1009,20 +1028,24 @@ private fun StoreInfoSettingsSection(
                     singleLine = true,
                     suffix = { Text("${branchName.length}/20") }
                 )
+                Spacer(Modifier.height(12.dp))
                 HorizontalDivider(color = Color(0xFF384049))
+                Spacer(Modifier.height(12.dp))
                 Text("표시 이름 미리보기", color = Color(0xFF9AA3AC), fontSize = 12.sp)
-                Text(displayName, color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(6.dp))
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF11161A)),
                     border = BorderStroke(1.dp, Color(0xFF313941)),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(10.dp)) {
                         Text("운영 대시보드", color = Color(0xFF9AA3AC), fontSize = 11.sp)
                         Text(displayName, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
+                Spacer(Modifier.height(14.dp))
                 Text("실제 백업 파일 이름", color = Color(0xFF9AA3AC), fontSize = 12.sp)
+                Spacer(Modifier.height(6.dp))
                 Text(
                     backupName,
                     color = Color(0xFFB8C1C9),
@@ -1030,27 +1053,46 @@ private fun StoreInfoSettingsSection(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                Spacer(Modifier.height(8.dp))
                 Text("ⓘ 사용할 수 없는 문자는 파일 이름에서 자동으로 정리됩니다.", color = Color(0xFF8D96A0), fontSize = 11.sp)
+                Spacer(Modifier.height(6.dp))
                 Text("ⓘ 정보를 변경해도 실행 중인 타이머와 기기 연결은 유지됩니다.", color = Color(0xFF8D96A0), fontSize = 11.sp)
+                Spacer(Modifier.height(12.dp))
                 Button(
                     onClick = onSave,
                     enabled = cleanStoreName.isNotBlank() && changed,
                     modifier = Modifier.fillMaxWidth().height(50.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C4DFF))
                 ) { Text("저장", fontWeight = FontWeight.Bold) }
-                TextButton(onClick = onReset, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                    Text("매장 정보 초기화", color = Color(0xFFB8C1C9))
+                Spacer(Modifier.height(6.dp))
+                TextButton(
+                    onClick = onReset,
+                    enabled = hasSavedStoreInfo,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                ) {
+                    Text(
+                        "매장 정보 초기화",
+                        color = Color(0xFFB8C1C9).copy(alpha = if (hasSavedStoreInfo) 1f else 0.38f)
+                    )
                 }
             }
         }
-        if (saved) {
+        if (feedback != StoreInfoFeedback.NONE) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 border = BorderStroke(1.dp, Color(0xFF62C900)),
                 colors = CardDefaults.cardColors(containerColor = Color(0x142D6B00)),
                 shape = RoundedCornerShape(10.dp)
             ) {
-                Text("✓  매장 정보가 저장되었습니다.", color = Color(0xFF82D72D), modifier = Modifier.padding(12.dp))
+                Text(
+                    if (feedback == StoreInfoFeedback.SAVED) {
+                        "✓  매장 정보가 저장되었습니다."
+                    } else {
+                        "✓  매장 정보가 초기화되었습니다."
+                    },
+                    color = Color(0xFF82D72D),
+                    modifier = Modifier.padding(12.dp)
+                )
             }
         }
     }
