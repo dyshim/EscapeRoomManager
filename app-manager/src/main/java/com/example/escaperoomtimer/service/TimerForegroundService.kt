@@ -13,6 +13,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 import com.example.escaperoomtimer.alarm.ManagerGameEndAlarmController
+import com.example.escaperoomtimer.alarm.ManagerAlarmPreviewController
 import com.example.escaperoomtimer.manager.HintProgressManager
 import com.example.escaperoomtimer.manager.TimerManager
 import com.example.escaperoomtimer.notification.TimerNotificationHelper
@@ -33,8 +34,10 @@ class TimerForegroundService : Service() {
     private val ticker = object : Runnable {
         override fun run() {
             TimerManager.tickAll()
-            if (TimerManager.consumeNaturallyCompletedRoomIds().isNotEmpty()) {
-                ManagerGameEndAlarmController.play(applicationContext)
+            val completedRoomIds = TimerManager.consumeNaturallyCompletedRoomIds()
+            if (completedRoomIds.isNotEmpty()) {
+                ManagerAlarmPreviewController.stopPreview()
+                ManagerGameEndAlarmController.play(applicationContext, completedRoomIds)
             }
             updateNotification()
             handler.postDelayed(this, 1000L)

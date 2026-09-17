@@ -2,6 +2,7 @@ package com.example.escaperoomtimer.manager
 
 import android.content.Context
 import androidx.compose.runtime.mutableStateListOf
+import com.example.escaperoomtimer.alarm.ManagerGameEndAlarmController
 import com.example.escaperoomtimer.model.RoomInfo
 import com.example.escaperoomtimer.model.RoomStatus
 import com.example.escaperoomtimer.repository.RoomRepository
@@ -71,6 +72,7 @@ object TimerManager {
             isRunning = if (maintenance) false else room.isRunning,
             status = if (maintenance) RoomStatus.WAITING else room.status
         )
+        if (maintenance) ManagerGameEndAlarmController.acknowledge(roomId)
         persistNow()
         return true
     }
@@ -81,6 +83,7 @@ object TimerManager {
         val room = rooms[index]
         if (!enabled && room.isRunning) return false
         rooms[index] = room.copy(isEnabled = enabled)
+        if (!enabled) ManagerGameEndAlarmController.acknowledge(roomId)
         persistNow()
         return true
     }
@@ -89,6 +92,7 @@ object TimerManager {
         val room = getRoom(roomId) ?: return false
         if (room.isRunning || rooms.size <= 1) return false
         rooms.removeAll { it.id == roomId }
+        ManagerGameEndAlarmController.acknowledge(roomId)
         persistNow()
         return true
     }
@@ -106,6 +110,14 @@ object TimerManager {
 
     fun restoreConfiguration(restoredRooms: List<RoomInfo>): Boolean {
         if (rooms.any { it.isRunning } || restoredRooms.isEmpty()) return false
+        rooms.forEach { room ->
+            val restored = restoredRooms.firstOrNull { it.id == room.id }
+            if (restored == null || restored.status != RoomStatus.FINISHED ||
+                restored.seconds > 0 || !restored.isEnabled || restored.isMaintenance
+            ) {
+                ManagerGameEndAlarmController.acknowledge(room.id)
+            }
+        }
         rooms.clear()
         rooms.addAll(restoredRooms)
         persistNow()
@@ -277,7 +289,13 @@ object TimerManager {
     private fun updateRoom(roomId: String, block: (RoomInfo) -> RoomInfo) {
         val index = rooms.indexOfFirst { it.id == roomId }
         if (index >= 0) {
-            rooms[index] = block(rooms[index])
+            val updated = block(rooms[index])
+            rooms[index] = updated
+            if (updated.status != RoomStatus.FINISHED || updated.seconds > 0 ||
+                !updated.isEnabled || updated.isMaintenance
+            ) {
+                ManagerGameEndAlarmController.acknowledge(roomId)
+            }
             persistNow()
         }
     }

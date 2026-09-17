@@ -66,7 +66,7 @@ fun TimerScreen(
     onBack: () -> Unit
 ) {
     val room = TimerManager.getRoom(roomId) ?: return
-    val alarmActive by ManagerGameEndAlarmController.isActive
+    val alarmActive = ManagerGameEndAlarmController.isAlarmActiveFor(room.id)
     val wifiConnected = rememberWifiConnected()
     val context = LocalContext.current
     val uiPreferences = remember(context) {
@@ -209,7 +209,7 @@ fun TimerScreen(
         if (room.status == RoomStatus.FINISHED && alarmActive) {
             Spacer(Modifier.height(12.dp))
             OutlinedButton(
-                onClick = ManagerGameEndAlarmController::stop,
+                onClick = { ManagerGameEndAlarmController.acknowledge(room.id) },
                 modifier = Modifier.fillMaxWidth().height(48.dp),
                 shape = RoundedCornerShape(12.dp),
                 border = androidx.compose.foundation.BorderStroke(1.dp, ManagerStatusColors.Finished)

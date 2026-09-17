@@ -44,6 +44,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.escaperoomtimer.alarm.ManagerGameEndAlarmController
+import com.example.escaperoomtimer.alarm.ManagerAlarmPreviewController
 import com.example.escaperoomtimer.settings.ManagerAlarmPreferences
 import com.example.escaperoomtimer.settings.ManagerAlarmSettings
 
@@ -61,9 +62,13 @@ fun ManagerAlarmSettingsSection() {
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) systemAlarmMuted = isSystemAlarmMuted(context)
+            if (event == Lifecycle.Event.ON_STOP) ManagerAlarmPreviewController.stopPreview()
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            ManagerAlarmPreviewController.stopPreview()
+        }
     }
 
     fun save(updated: ManagerAlarmSettings) {
@@ -139,7 +144,10 @@ fun ManagerAlarmSettingsSection() {
                 Switch(
                     checked = settings.enabled,
                     onCheckedChange = {
-                        if (!it) ManagerGameEndAlarmController.stop()
+                        if (!it) {
+                            ManagerAlarmPreviewController.stopPreview()
+                            ManagerGameEndAlarmController.stop()
+                        }
                         save(settings.copy(enabled = it))
                     }
                 )
@@ -160,6 +168,7 @@ fun ManagerAlarmSettingsSection() {
             ) {
                 OutlinedButton(
                     onClick = {
+                        ManagerAlarmPreviewController.stopPreview()
                         val currentUri = settings.soundUri?.let(Uri::parse)
                             ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
                         val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
@@ -177,11 +186,13 @@ fun ManagerAlarmSettingsSection() {
                 }
                 Button(
                     onClick = {
-                        ManagerGameEndAlarmController.preview(
-                            context,
-                            settings.soundUri,
-                            settings.volumePercent
-                        )
+                        if (!ManagerGameEndAlarmController.isActive.value) {
+                            ManagerAlarmPreviewController.playPreview(
+                                context,
+                                settings.soundUri,
+                                settings.volumePercent
+                            )
+                        }
                     },
                     modifier = Modifier.weight(1f),
                     enabled = settings.enabled
@@ -285,6 +296,7 @@ fun ManagerAlarmSettingsSection() {
             text = { Text("종료 알림, 알람음, 음량, 자동 정지와 진동을 기본값으로 되돌릴까요?\n\n사용 · 기본 알람음 · 80% · 30초 · 진동 사용") },
             confirmButton = {
                 Button(onClick = {
+                    ManagerAlarmPreviewController.stopPreview()
                     ManagerGameEndAlarmController.stop()
                     save(
                         ManagerAlarmSettings(
